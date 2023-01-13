@@ -199,6 +199,9 @@ var annotated_dup =
     [ "catacurses", "namespacecatacurses.html", [
       [ "window", "classcatacurses_1_1window.html", "classcatacurses_1_1window" ]
     ] ],
+    [ "character_funcs", "namespacecharacter__funcs.html", [
+      [ "comfort_response_t", "structcharacter__funcs_1_1comfort__response__t.html", "structcharacter__funcs_1_1comfort__response__t" ]
+    ] ],
     [ "coords", "namespacecoords.html", [
       [ "coord_point", "classcoords_1_1coord__point.html", "classcoords_1_1coord__point" ],
       [ "project_to_impl", "structcoords_1_1project__to__impl.html", null ],
@@ -310,6 +313,7 @@ var annotated_dup =
       [ "locale_ref", "classdetail_1_1locale__ref.html", "classdetail_1_1locale__ref" ],
       [ "make_unsigned_or_bool", "structdetail_1_1make__unsigned__or__bool.html", null ],
       [ "make_unsigned_or_bool< bool >", "structdetail_1_1make__unsigned__or__bool_3_01bool_01_4.html", "structdetail_1_1make__unsigned__or__bool_3_01bool_01_4" ],
+      [ "mutations_ui_result", "structdetail_1_1mutations__ui__result.html", "structdetail_1_1mutations__ui__result" ],
       [ "named_arg", "structdetail_1_1named__arg.html", "structdetail_1_1named__arg" ],
       [ "named_arg_info", "structdetail_1_1named__arg__info.html", "structdetail_1_1named__arg__info" ],
       [ "named_arg_value", "structdetail_1_1named__arg__value.html", "structdetail_1_1named__arg__value" ],
@@ -341,6 +345,9 @@ var annotated_dup =
       [ "width_adapter", "structdetail_1_1width__adapter.html", "structdetail_1_1width__adapter" ],
       [ "width_checker", "classdetail_1_1width__checker.html", "classdetail_1_1width__checker" ],
       [ "write_int_data", "structdetail_1_1write__int__data.html", "structdetail_1_1write__int__data" ]
+    ] ],
+    [ "distraction_manager", "namespacedistraction__manager.html", [
+      [ "distraction_manager_gui", "classdistraction__manager_1_1distraction__manager__gui.html", "classdistraction__manager_1_1distraction__manager__gui" ]
     ] ],
     [ "distribution_graph", "namespacedistribution__graph.html", [
       [ "vehicle_or_grid", "structdistribution__graph_1_1vehicle__or__grid.html", "structdistribution__graph_1_1vehicle__or__grid" ]
@@ -408,6 +415,9 @@ var annotated_dup =
       [ "pick_drop_selection", "structpickup_1_1pick__drop__selection.html", "structpickup_1_1pick__drop__selection" ],
       [ "stacked_items", "structpickup_1_1stacked__items.html", "structpickup_1_1stacked__items" ],
       [ "unstacked_items", "structpickup_1_1unstacked__items.html", "structpickup_1_1unstacked__items" ]
+    ] ],
+    [ "ranged", "namespaceranged.html", [
+      [ "aim_type", "structranged_1_1aim__type.html", "structranged_1_1aim__type" ]
     ] ],
     [ "reader_detail", "namespacereader__detail.html", [
       [ "handler", "structreader__detail_1_1handler.html", "structreader__detail_1_1handler" ],
@@ -480,7 +490,6 @@ var annotated_dup =
     [ "advanced_inventory_pane", "classadvanced__inventory__pane.html", "classadvanced__inventory__pane" ],
     [ "affected_type", "structaffected__type.html", "structaffected__type" ],
     [ "aim_activity_actor", "classaim__activity__actor.html", "classaim__activity__actor" ],
-    [ "aim_type", "structaim__type.html", "structaim__type" ],
     [ "ally_rule_data", "structally__rule__data.html", "structally__rule__data" ],
     [ "ammo_effect", "structammo__effect.html", "structammo__effect" ],
     [ "ammobelt_actor", "classammobelt__actor.html", "classammobelt__actor" ],
@@ -555,6 +564,7 @@ var annotated_dup =
     [ "centroid", "structcentroid.html", "structcentroid" ],
     [ "change_scent_iuse", "classchange__scent__iuse.html", "classchange__scent__iuse" ],
     [ "char_encumbrance_data", "structchar__encumbrance__data.html", "structchar__encumbrance__data" ],
+    [ "char_trait_data", "structchar__trait__data.html", "structchar__trait__data" ],
     [ "Character", "classCharacter.html", "classCharacter" ],
     [ "character_id", "classcharacter__id.html", "classcharacter__id" ],
     [ "character_martial_arts", "classcharacter__martial__arts.html", "classcharacter__martial__arts" ],
@@ -624,6 +634,8 @@ var annotated_dup =
     [ "diagonal_blocks", "structdiagonal__blocks.html", "structdiagonal__blocks" ],
     [ "dialogue", "structdialogue.html", "structdialogue" ],
     [ "dialogue_window", "classdialogue__window.html", "classdialogue__window" ],
+    [ "diary", "classdiary.html", "classdiary" ],
+    [ "diary_page", "structdiary__page.html", "structdiary__page" ],
     [ "dig_activity_actor", "classdig__activity__actor.html", "classdig__activity__actor" ],
     [ "dig_channel_activity_actor", "classdig__channel__activity__actor.html", "classdig__channel__activity__actor" ],
     [ "digging_moves_and_byproducts", "structdigging__moves__and__byproducts.html", "structdigging__moves__and__byproducts" ],
@@ -681,6 +693,7 @@ var annotated_dup =
     [ "enum_traits< condition_type >", "structenum__traits_3_01condition__type_01_4.html", "structenum__traits_3_01condition__type_01_4" ],
     [ "enum_traits< DC >", "structenum__traits_3_01DC_01_4.html", "structenum__traits_3_01DC_01_4" ],
     [ "enum_traits< description_affix >", "structenum__traits_3_01description__affix_01_4.html", "structenum__traits_3_01description__affix_01_4" ],
+    [ "enum_traits< distraction_type >", "structenum__traits_3_01distraction__type_01_4.html", "structenum__traits_3_01distraction__type_01_4" ],
     [ "enum_traits< DL >", "structenum__traits_3_01DL_01_4.html", "structenum__traits_3_01DL_01_4" ],
     [ "enum_traits< enchant_vals::mod >", "structenum__traits_3_01enchant__vals_1_1mod_01_4.html", "structenum__traits_3_01enchant__vals_1_1mod_01_4" ],
     [ "enum_traits< enchantment::condition >", "structenum__traits_3_01enchantment_1_1condition_01_4.html", "structenum__traits_3_01enchantment_1_1condition_01_4" ],
@@ -752,6 +765,8 @@ var annotated_dup =
     [ "firestarter_actor", "classfirestarter__actor.html", "classfirestarter__actor" ],
     [ "fireweapon_off_actor", "classfireweapon__off__actor.html", "classfireweapon__off__actor" ],
     [ "fireweapon_on_actor", "classfireweapon__on__actor.html", "classfireweapon__on__actor" ],
+    [ "folded_line", "structfolded__line.html", "structfolded__line" ],
+    [ "folded_text", "classfolded__text.html", "classfolded__text" ],
     [ "font_loader", "classfont__loader.html", "classfont__loader" ],
     [ "food_summary", "structfood__summary.html", "structfood__summary" ],
     [ "forecast_period", "structforecast__period.html", "structforecast__period" ],
@@ -810,6 +825,7 @@ var annotated_dup =
     [ "holster_actor", "classholster__actor.html", "classholster__actor" ],
     [ "holster_inventory_preset", "classholster__inventory__preset.html", "classholster__inventory__preset" ],
     [ "idle_animation_manager", "classidle__animation__manager.html", "classidle__animation__manager" ],
+    [ "ime_preview_range", "structime__preview__range.html", "structime__preview__range" ],
     [ "ime_sentry", "classime__sentry.html", "classime__sentry" ],
     [ "inclusive_cuboid", "structinclusive__cuboid.html", "structinclusive__cuboid" ],
     [ "inclusive_rectangle", "structinclusive__rectangle.html", "structinclusive__rectangle" ],
@@ -1074,6 +1090,7 @@ var annotated_dup =
     [ "mutagen_iv_actor", "classmutagen__iv__actor.html", "classmutagen__iv__actor" ],
     [ "mutation_branch", "structmutation__branch.html", "structmutation__branch" ],
     [ "mutation_category_trait", "structmutation__category__trait.html", "structmutation__category__trait" ],
+    [ "mutation_collection", "structmutation__collection.html", null ],
     [ "mutation_type", "structmutation__type.html", "structmutation__type" ],
     [ "mvwzstr", "structmvwzstr.html", "structmvwzstr" ],
     [ "navigation_mode_data", "structnavigation__mode__data.html", "structnavigation__mode__data" ],
@@ -1113,7 +1130,6 @@ var annotated_dup =
     [ "omt_find_params", "structomt__find__params.html", "structomt__find__params" ],
     [ "omt_route_params", "structomt__route__params.html", "structomt__route__params" ],
     [ "on_out_of_scope", "classon__out__of__scope.html", "classon__out__of__scope" ],
-    [ "open_gate_activity_actor", "classopen__gate__activity__actor.html", "classopen__gate__activity__actor" ],
     [ "optional_vpart_position", "classoptional__vpart__position.html", "classoptional__vpart__position" ],
     [ "options_manager", "classoptions__manager.html", "classoptions__manager" ],
     [ "oter_t", "structoter__t.html", "structoter__t" ],
@@ -1284,6 +1300,7 @@ var annotated_dup =
     [ "stomach_contents", "classstomach__contents.html", "classstomach__contents" ],
     [ "stomach_digest_rates", "structstomach__digest__rates.html", "structstomach__digest__rates" ],
     [ "string_col", "structstring__col.html", "structstring__col" ],
+    [ "string_editor_window", "classstring__editor__window.html", "classstring__editor__window" ],
     [ "string_id", "classstring__id.html", "classstring__id" ],
     [ "string_id_params", "structstring__id__params.html", "structstring__id__params" ],
     [ "string_id_params< Item_spawn_data >", "structstring__id__params_3_01Item__spawn__data_01_4.html", "structstring__id__params_3_01Item__spawn__data_01_4" ],
@@ -1333,6 +1350,7 @@ var annotated_dup =
     [ "timed_event", "structtimed__event.html", "structtimed__event" ],
     [ "timed_event_manager", "classtimed__event__manager.html", "classtimed__event__manager" ],
     [ "tinymap", "classtinymap.html", "classtinymap" ],
+    [ "toggle_gate_activity_actor", "classtoggle__gate__activity__actor.html", "classtoggle__gate__activity__actor" ],
     [ "tool_comp", "structtool__comp.html", "structtool__comp" ],
     [ "towing_data", "classtowing__data.html", "classtowing__data" ],
     [ "trading_window", "classtrading__window.html", "classtrading__window" ],
