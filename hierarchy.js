@@ -159,9 +159,6 @@ var hierarchy =
     [ "bionic_data", "structbionic__data.html", null ],
     [ "anonymous_namespace{bionics_ui.cpp}::bionic_sort_less", "structanonymous__namespace_02bionics__ui_8cpp_03_1_1bionic__sort__less.html", null ],
     [ "detail::bits< T >", "structdetail_1_1bits.html", null ],
-    [ "std::bitset< Bits >", null, [
-      [ "iteminfo_query", "classiteminfo__query.html", null ]
-    ] ],
     [ "player_morale::body_part_data", "structplayer__morale_1_1body__part__data.html", null ],
     [ "body_part_set", "classbody__part__set.html", null ],
     [ "body_part_type", "structbody__part__type.html", null ],
@@ -490,6 +487,8 @@ var hierarchy =
     [ "enum_traits< ot_match_type >", "structenum__traits_3_01ot__match__type_01_4.html", null ],
     [ "enum_traits< phase_id >", "structenum__traits_3_01phase__id_01_4.html", null ],
     [ "enum_traits< precip_class >", "structenum__traits_3_01precip__class_01_4.html", null ],
+    [ "enum_traits< relic_recharge_req >", "structenum__traits_3_01relic__recharge__req_01_4.html", null ],
+    [ "enum_traits< relic_recharge_type >", "structenum__traits_3_01relic__recharge__type_01_4.html", null ],
     [ "enum_traits< season_type >", "structenum__traits_3_01season__type_01_4.html", null ],
     [ "enum_traits< side >", "structenum__traits_3_01side_01_4.html", null ],
     [ "enum_traits< sounds::sound_t >", "structenum__traits_3_01sounds_1_1sound__t_01_4.html", null ],
@@ -973,6 +972,7 @@ var hierarchy =
       [ "vehicle_stack", "classvehicle__stack.html", null ]
     ] ],
     [ "iteminfo", "structiteminfo.html", null ],
+    [ "iteminfo_query", "classiteminfo__query.html", null ],
     [ "game::non_dead_range< T >::iterator", "classgame_1_1non__dead__range_1_1iterator.html", null ],
     [ "rect_range< RectType >::iterator", "classrect__range_1_1iterator.html", null ],
     [ "std::iterator_traits< vehicle_part_iterator< T > >", "structstd_1_1iterator__traits_3_01vehicle__part__iterator_3_01T_01_4_01_4.html", null ],
@@ -1457,6 +1457,7 @@ var hierarchy =
     [ "region_terrain_and_furniture_settings", "structregion__terrain__and__furniture__settings.html", null ],
     [ "regional_settings", "structregional__settings.html", null ],
     [ "relic", "classrelic.html", null ],
+    [ "relic_recharge", "classrelic__recharge.html", null ],
     [ "item::reload_option", "classitem_1_1reload__option.html", null ],
     [ "RemovePartHandler", "classRemovePartHandler.html", [
       [ "DefaultRemovePartHandler", "classDefaultRemovePartHandler.html", null ],
