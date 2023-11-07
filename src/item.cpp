@@ -438,6 +438,7 @@ item::item( const item &source ) : game_object<item>( source ), contents( this )
     invlet = source.invlet;
     active = source.active;
     activated_by = source.activated_by;
+    is_favorite = source.is_favorite;
 
     for( item * const &it : source.contents.all_items_top() ) {
         contents.insert_item( item::spawn( *it ) );
@@ -4516,14 +4517,9 @@ std::string item::tname( unsigned int quantity, bool with_prefix, unsigned int t
             truncate_override = utf8_width( damtext, false ) - utf8_width( damtext, true );
         }
     }
+
     if( !faults.empty() ) {
-        bool silent = true;
-        for( const auto &fault : faults ) {
-            if( !fault->has_flag( "SILENT" ) ) {
-                silent = false;
-                break;
-            }
-        }
+        const bool silent = std::any_of( faults.begin(), faults.end(), []( const fault_id & f ) -> bool { return f->has_flag( "SILENT" ); } );
         if( silent ) {
             damtext.insert( 0, dirt_symbol );
         } else {
