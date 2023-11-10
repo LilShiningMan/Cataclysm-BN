@@ -4728,14 +4728,15 @@ bool npc::adjust_worn()
     }
     const auto covers_broken = [this]( const item & it, side s ) {
         const body_part_set covered = it.get_covered_body_parts( s );
-        for( const std::pair<const bodypart_str_id, bodypart> &elem : get_body() ) {
-            if( elem.second.get_hp_cur() <= 0 && covered.test( elem.first ) ) {
+        for( const bodypart_str_id &bp_id : covered ) {
+            if( is_limb_broken( bp_id ) && covered.test( bp_id ) ) {
                 return true;
             }
         }
         return false;
     };
 
+    item *splint = nullptr;
     for( auto &elem : worn ) {
         if( !elem->has_flag( flag_SPLINT ) ) {
             continue;
@@ -4744,10 +4745,20 @@ bool npc::adjust_worn()
         if( !covers_broken( *elem, elem->get_side() ) ) {
             const bool needs_change = covers_broken( *elem, opposite_side( elem->get_side() ) );
             // Try to change side (if it makes sense), or take off.
-            if( ( needs_change && change_side( *elem ) ) || takeoff( *elem ) ) {
+            if( needs_change && change_side( *elem ) ) {
                 return true;
             }
+
+            if( can_takeoff( *elem ).success() ) {
+                splint = elem;
+                break;
+            }
+
         }
+    }
+    if( splint ) {
+        takeoff( *splint );
+        return true;
     }
 
     return false;
