@@ -3123,40 +3123,34 @@ std::vector<item *> npc_pickup_from_stack( npc &who, T &items )
     auto min_value = whitelisting ? 0 : who.minimum_item_value();
     std::vector<item *> picked_up;
 
-    for( auto iter = items.begin(); iter != items.end(); ) {
-        item &it = **iter;
+    for( auto &iter : items ) {
+        item &it = *iter;
         if( it.made_of( LIQUID ) ) {
-            iter++;
             continue;
         }
 
         if( whitelisting && !who.item_whitelisted( it ) ) {
-            iter++;
             continue;
         }
 
         auto volume = it.volume();
         if( volume > volume_allowed ) {
-            iter++;
             continue;
         }
 
         auto weight = it.weight();
         if( weight > weight_allowed ) {
-            iter++;
             continue;
         }
 
         int itval = whitelisting ? 1000 : who.value( it );
         if( itval < min_value ) {
-            iter++;
             continue;
         }
 
         volume_allowed -= volume;
         weight_allowed -= weight;
         picked_up.push_back( &it );
-        iter = items.erase( iter );
     }
 
     return picked_up;
@@ -4088,7 +4082,7 @@ void npc::mug_player( Character &mark )
         return;
     }
     if( !is_hallucination() ) {
-        i_add( mark.i_rem( to_steal ) );
+        i_add( to_steal->detach( ) );
         if( mark.is_npc() ) {
             if( u_see ) {
                 add_msg( _( "%1$s takes %2$s's %3$s." ), name, mark.name, to_steal->tname() );
