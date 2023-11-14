@@ -91,7 +91,7 @@ static const ammo_effect_str_id ammo_effect_LIGHTNING( "LIGHTNING" );
 static const ammo_effect_str_id ammo_effect_NO_CRIT( "NO_CRIT" );
 static const ammo_effect_str_id ammo_effect_NO_EMBED( "NO_EMBED" );
 static const ammo_effect_str_id ammo_effect_NO_ITEM_DAMAGE( "NO_ITEM_DAMAGE" );
-static const ammo_effect_str_id ammo_effect_NON_FOULING( "NON-FOULING" );
+static const ammo_effect_str_id ammo_effect_NON_FOULING( "NON_FOULING" );
 static const ammo_effect_str_id ammo_effect_PLASMA( "PLASMA" );
 static const ammo_effect_str_id ammo_effect_RECYCLED( "RECYCLED" );
 static const ammo_effect_str_id ammo_effect_SHATTER_SELF( "SHATTER_SELF" );
@@ -1955,13 +1955,15 @@ dispersion_sources ranged::get_weapon_dispersion( const Character &who, const it
     return dispersion;
 }
 
-std::pair<gun_mode_id, std::optional<gun_mode>> npc_ai::best_mode_for_range( const Character &who,
-        const item &firing,
-        int dist )
+auto npc_ai::best_mode_for_range(
+    const Character &who, const item &firing, int dist
+) -> std::pair<gun_mode_id, std::optional<gun_mode>>
 {
-    int shots = who.is_wielding( firing ) ? character_funcs::ammo_count_for( who,
-                firing ) : item_funcs::shots_remaining( who, firing );
-    if( !firing.is_gun() || shots == 0 ) {
+    const int shots = who.is_wielding( firing )
+                      ? character_funcs::ammo_count_for( who, firing )
+                      : item_funcs::shots_remaining( who, firing );
+
+    if( !firing.is_gun() || firing.is_gunmod() || shots == 0 ) {
         return std::make_pair( gun_mode_id(), std::nullopt );
     }
     int min_recoil = MAX_RECOIL;
