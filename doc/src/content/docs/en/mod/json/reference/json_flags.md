@@ -532,7 +532,8 @@ List of known flags, used in both `terrain.json` and `furniture.json`.
 - `CONSOLE` Used as a computer.
 - `CONTAINER` Items on this square are hidden until looted by the player.
 - `DECONSTRUCT` Can be deconstructed.
-- `DEEP_WATER`
+- `DEEP_WATER` Deep enough to submerge things
+- `WATER_CUBE` Water tile that is entirely water
 - `DESTROY_ITEM` Items that land here are destroyed. See also `NOITEM`
 - `DIFFICULT_Z` Most zombies will not be able to follow you up this terrain ( i.e a ladder )
 - `DIGGABLE_CAN_DEEPEN` Diggable location can be dug again to make deeper (e.g. shallow pit to deep
@@ -596,6 +597,8 @@ List of known flags, used in both `terrain.json` and `furniture.json`.
 - `SEALED` Can't use <kbd>e</kbd> to retrieve items; must smash them open first.
 - `SEEN_FROM_ABOVE` Visible from a higher level (provided the tile above has no floor)
 - `SHARP` May do minor damage to players/monsters passing through it.
+- `SHOOT_ME` Players can aim at terrain or furniture with this flag like they can with
+  `tr_practice_target` to train marksmanship.
 - `SHORT` Feature too short to collide with vehicle protrusions. (mirrors, blades).
 - `SIGN` Show written message on examine.
 - `SMALL_PASSAGE` This terrain or furniture is too small for large or huge creatures to pass
@@ -761,12 +764,15 @@ List of known flags, used in both `terrain.json` and `furniture.json`.
 - `DISABLE_SIGHTS` Prevents use of the base weapon sights
 - `FIRE_100` Uses 100 shots per firing.
 - `FIRE_50` Uses 50 shots per firing.
+- `HEAVY_WEAPON_SUPPORT` Wearing this will let you hip-fire heavy weapons without needing terrain
+  support, like Large or Huge mutants can.
 - `FIRE_TWOHAND` Gun can only be fired if player has two free hands.
 - `IRREMOVABLE` Makes so that the gunmod cannot be removed.
 - `MECH_BAT` This is an exotic battery designed to power military mechs.
 - `MOUNTED_GUN` Gun can only be used on terrain / furniture with the "MOUNTABLE" flag, if you're a
   normal human. If you're an oversized mutant (Inconveniently Large, Large, Freakishly Huge, Huge),
-  you can fire it regularly in exchange for dispersion and recoil penalties.
+  you can fire it regularly in exchange for dispersion and recoil penalties. Wearing something with
+  the `HEAVY_WEAPON_SUPPORT` flag also works.
 - `NEVER_JAMS` Never malfunctions.
 - `NO_UNLOAD` Cannot be unloaded.
 - `PRIMITIVE_RANGED_WEAPON` Allows using non-gunsmith tools to repair it (but not reinforce).
@@ -879,7 +885,9 @@ List of known flags, used in both `terrain.json` and `furniture.json`.
   volume not bigger than 2)
 - `SHEATH_SWORD` Item can be sheathed in a sword scabbard
 - `SPEAR` When making reach attacks intervening THIN_OBSTACLE terrain is not an obstacle. Should be
-  paired with REACH_ATTACK.
+  paired with `REACH_ATTACK`.
+- `STAB` A legacy flag that converts an weapon's damage type into pierce. This is a hack as we
+  cannot use the damage object used by ammo to specify the damage type of melee weapon.
 - `UNARMED_WEAPON` Wielding this item still counts as unarmed combat.
 - `WHIP` Has a chance of disarming the opponent.
 
@@ -1270,6 +1278,10 @@ These branches are also the valid entries for the categories of `dreams` in `dre
   contain any lake terrain.
 - `UNIQUE` Location is unique and will only occur once per overmap. `occurrences` is overridden to
   define a percent chance (e.g. `"occurrences" : [75, 100]` is 75%)
+- `ENDGAME` Location will have highest priority during special placement, and won't be affected by
+  any occurrences normalizations.
+- `RESTRICTED` Location will never be spawned as starting locations. Intended(but not limited) to
+  use with incomplete nested specials.
 
 ### Overmap terrains
 

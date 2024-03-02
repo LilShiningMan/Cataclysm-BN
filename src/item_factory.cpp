@@ -172,7 +172,9 @@ namespace
 // TODO: add explicit action field to gun definitions
 auto defmode_name( itype &obj )
 {
-    if( obj.gun->clip == 1 ) {
+    if( obj.mod ) {
+        return translate_marker( "gunmod" ); // grenade launchers
+    } else if( obj.gun->clip == 1 ) {
         return translate_marker( "manual" ); // break-type actions
     } else if( obj.gun->skill_used == skill_id( "pistol" ) && obj.has_flag( flag_RELOAD_ONE ) ) {
         return translate_marker( "revolver" );
@@ -190,7 +192,7 @@ void Item_factory::finalize_pre( itype &obj )
         obj.item_tags.insert( flag_NO_REPAIR );
     }
 
-    if( obj.has_flag( flag_STAB ) || obj.has_flag( flag_SPEAR ) ) {
+    if( obj.has_flag( flag_STAB ) ) {
         std::swap( obj.melee[DT_CUT], obj.melee[DT_STAB] );
     }
 
@@ -577,6 +579,31 @@ void Item_factory::finalize_pre( itype &obj )
         // HACK: Legacy martial arts books rely on a hack whereby the name of the
         // martial art is derived from the item id
         obj.book->martial_art = matype_id( "style_" + obj.get_id().str().substr( 7 ) );
+    }
+
+    if( obj.armor ) {
+
+        auto set_resist = [&obj]( damage_type dt,
+        std::function<int( const material_type & )> resist_getter ) {
+            if( obj.armor->resistance.flat.find( dt ) != obj.armor->resistance.flat.end() ) {
+                return;
+            }
+            float resist = 0.0f;
+            if( !obj.materials.empty() ) {
+                for( const material_id &mat : obj.materials ) {
+                    resist += resist_getter( *mat );
+                }
+                resist /= obj.materials.size();
+            }
+
+            obj.armor->resistance.flat[dt] = std::lround( resist * obj.armor->thickness );
+        };
+        set_resist( DT_BASH, &material_type::bash_resist );
+        set_resist( DT_CUT, &material_type::cut_resist );
+        set_resist( DT_STAB, []( const material_type & t ) {
+            return t.cut_resist() * 0.8f;
+        } );
+        set_resist( DT_BULLET, &material_type::bullet_resist );
     }
 }
 
@@ -1913,6 +1940,7 @@ void Item_factory::load( islot_armor &slot, const JsonObject &jo, const std::str
 {
     const bool strict = is_strict_enabled( src );
 
+    assign( jo, "resistance", slot.resistance, strict );
     assign( jo, "material_thickness", slot.thickness, strict, 0 );
     assign( jo, "environmental_protection", slot.env_resist, strict, 0 );
     assign( jo, "environmental_protection_with_filter", slot.env_resist_w_filter, strict, 0 );
@@ -1927,26 +1955,16 @@ void Item_factory::load( islot_armor &slot, const JsonObject &jo, const std::str
         if( !slot.data.empty() ) { // Uses copy-from
             dont_add_first = true;
             const JsonObject &obj = *jo.get_array( "armor_portion_data" ).begin();
-            armor_portion_data tempData;
 
             if( obj.has_array( "encumbrance" ) ) {
-                tempData.encumber = obj.get_array( "encumbrance" ).get_int( 0 );
-                tempData.max_encumber = obj.get_array( "encumbrance" ).get_int( 1 );
+                slot.data[0].encumber = obj.get_array( "encumbrance" ).get_int( 0 );
+                slot.data[0].max_encumber = obj.get_array( "encumbrance" ).get_int( 1 );
             } else if( obj.has_int( "encumbrance" ) ) {
-                tempData.encumber = obj.get_int( "encumbrance" );
-                tempData.max_encumber = tempData.encumber;
+                slot.data[0].encumber = obj.get_int( "encumbrance" );
+                slot.data[0].max_encumber = slot.data[0].encumber;
             }
             if( obj.has_int( "coverage" ) ) {
-                tempData.coverage = obj.get_int( "coverage" );
-            }
-            if( tempData.encumber != slot.data[0].encumber ) {
-                slot.data[0].encumber = tempData.encumber;
-            }
-            if( tempData.max_encumber != slot.data[0].max_encumber ) {
-                slot.data[0].max_encumber = tempData.max_encumber;
-            }
-            if( tempData.coverage != slot.data[0].coverage ) {
-                slot.data[0].coverage = tempData.coverage;
+                slot.data[0].coverage = obj.get_int( "coverage" );
             }
             body_part_set temp_cover_data;
             assign_coverage_from_json( obj, "covers", temp_cover_data, slot.sided );
@@ -2002,28 +2020,15 @@ void Item_factory::load( islot_armor &slot, const JsonObject &jo, const std::str
             assign_coverage_from_json( jo, "covers", temp_cover_data, slot.sided );
             slot.data[0].covers = temp_cover_data;
         } else { // This item has copy-from and already has taken data from parent
-            armor_portion_data child_data;
             if( jo.has_int( "encumbrance" ) ) {
-                child_data.encumber = jo.get_int( "encumbrance" );
-                child_data.max_encumber = child_data.encumber;
+                slot.data[0].encumber = jo.get_int( "encumbrance" );
+                slot.data[0].max_encumber = slot.data[0].encumber;
             }
             if( jo.has_int( "max_encumbrance" ) ) {
-                child_data.max_encumber = jo.get_int( "max_encumbrance" );
-            } else {
-                child_data.max_encumber = child_data.encumber;
+                slot.data[0].max_encumber = jo.get_int( "max_encumbrance" );
             }
             if( jo.has_int( "coverage" ) ) {
-                child_data.coverage = jo.get_int( "coverage" );
-            }
-            // If child item contains data, use that data, otherwise use parents data
-            if( child_data.encumber != slot.data[0].encumber && child_data.encumber != 0 ) {
-                slot.data[0].encumber = child_data.encumber;
-            }
-            if( child_data.max_encumber != slot.data[0].max_encumber && child_data.max_encumber != 0 ) {
-                slot.data[0].max_encumber = child_data.max_encumber;
-            }
-            if( child_data.coverage != slot.data[0].coverage && child_data.coverage != 0 ) {
-                slot.data[0].coverage = child_data.coverage;
+                slot.data[0].coverage = jo.get_int( "coverage" );
             }
             body_part_set temp_cover_data;
             assign_coverage_from_json( jo, "covers", temp_cover_data, slot.sided );
@@ -2198,7 +2203,6 @@ void Item_factory::load( islot_comestible &slot, const JsonObject &jo, const std
     assign( jo, "healthy", slot.healthy, strict );
     assign( jo, "parasites", slot.parasites, strict, 0 );
     assign( jo, "radiation", slot.radiation, strict );
-    assign( jo, "freezing_point", slot.freeze_point, strict );
     assign( jo, "spoils_in", slot.spoils, strict, 1_hours );
     assign( jo, "cooks_like", slot.cooks_like, strict );
     assign( jo, "smoking_result", slot.smoking_result, strict );
@@ -2334,6 +2338,7 @@ void Item_factory::load( islot_seed &slot, const JsonObject &jo, const std::stri
     assign( jo, "fruit", slot.fruit_id );
     assign( jo, "seeds", slot.spawn_seeds );
     assign( jo, "byproducts", slot.byproducts );
+    assign( jo, "required_terrain_flag", slot.required_terrain_flag );
 }
 
 void Item_factory::load( islot_container &slot, const JsonObject &jo, const std::string & )

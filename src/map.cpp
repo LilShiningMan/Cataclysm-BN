@@ -2856,13 +2856,14 @@ bool map::mop_spills( const tripoint &p )
 
     if( !has_flag( "LIQUIDCONT", p ) && !has_flag( "SEALED", p ) ) {
         auto items = i_at( p );
-        auto new_end = std::remove_if( items.begin(), items.end(), []( const item * const & it ) {
-            return it->made_of( LIQUID );
+
+        items.remove_top_items_with( [&retval]( detached_ptr<item> &&e ) {
+            if( e->made_of( LIQUID ) ) {
+                retval = true;
+                return detached_ptr<item>();
+            }
+            return std::move( e );
         } );
-        retval = new_end != items.end();
-        while( new_end != items.end() ) {
-            new_end = items.erase( new_end );
-        }
     }
 
     field &fld = field_at( p );
@@ -2893,13 +2894,13 @@ bool map::mop_spills( const tripoint &p )
             }
             //remove any liquids that somehow didn't fall through to the ground
             vehicle_stack here = veh->get_items( elem );
-            auto new_end = std::remove_if( here.begin(), here.end(), []( const item * const & it ) {
-                return it->made_of( LIQUID );
+            here.remove_top_items_with( [&retval]( detached_ptr<item> &&e ) {
+                if( e->made_of( LIQUID ) ) {
+                    retval = true;
+                    return detached_ptr<item>();
+                }
+                return std::move( e );
             } );
-            retval |= ( new_end != here.end() );
-            while( new_end != here.end() ) {
-                new_end = here.erase( new_end );
-            }
         }
     } // if veh != 0
     return retval;
@@ -3092,8 +3093,11 @@ void map::smash_items( const tripoint &p, const int power, const std::string &ca
         if( will_explode_on_impact( power ) && it->will_explode_in_fire() ) {
             return item::detonate( std::move( it ), p, contents );
         }
-        if( ( power < min_destroy_threshold || !do_destroy ) && !it->can_revive() ) {
-            return std::move( it );
+        if( it->is_corpse() ) {
+            if( ( power < min_destroy_threshold || !do_destroy ) && !it->can_revive() &&
+                !it->get_mtype()->zombify_into ) {
+                return std::move( it );
+            }
         }
         bool is_active_explosive = it->active && it->type->get_use( "explosion" ) != nullptr;
         if( is_active_explosive && it->charges == 0 ) {
@@ -3800,12 +3804,15 @@ void map::crush( const tripoint &p )
     }
 }
 
-void map::shoot( const tripoint &p, projectile &proj, const bool hit_items )
+void map::shoot( const tripoint &origin, const tripoint &p, projectile &proj, const bool hit_items )
 {
     float initial_damage = 0.0;
+    float initial_arpen = 0.0;
+    float initial_armor_mult = 1.0;
     for( const damage_unit &dam : proj.impact ) {
         initial_damage += dam.amount * dam.damage_multiplier;
-        initial_damage += dam.res_pen;
+        initial_arpen += dam.res_pen;
+        initial_armor_mult *= dam.res_mult;
     }
     if( initial_damage < 0 ) {
         return;
@@ -3826,23 +3833,67 @@ void map::shoot( const tripoint &p, projectile &proj, const bool hit_items )
         dam = vp->vehicle().damage( vp->part_index(), dam, inc ? DT_HEAT : DT_STAB, hit_items );
     }
 
+    furn_id furn_here = furn( p );
+    furn_t furn = furn_here.obj();
+
     ter_id terrain = ter( p );
     ter_t ter = terrain.obj();
 
-    if( ter.bash.ranged ) {
-        const ranged_bash_info &ri = *ter.bash.ranged;
-        if( !hit_items && !check( ri.block_unaimed_chance ) ) {
-            // Nothing, it's a miss
-        } else if( ri.reduction_laser && proj.has_effect( ammo_effect_LASER ) ) {
-            dam -= rng( ri.reduction_laser->min, ri.reduction_laser->max );
+    if( furn.bash.ranged ) {
+        double range = rl_dist( origin, p );
+        const ranged_bash_info &rfi = *furn.bash.ranged;
+        float destroy_roll = dam * rng_float( 0.9, 1.1 );
+        if( !hit_items && ( !check( rfi.block_unaimed_chance ) || ( rfi.block_unaimed_chance < 100_pct &&
+                            range <= 1 ) ) ) {
+            // Nothing, it's a miss or we're shooting over nearby furniture
+        } else if( rfi.reduction_laser && proj.has_effect( ammo_effect_LASER ) ) {
+            dam -= std::max( ( rng( rfi.reduction_laser->min,
+                                    rfi.reduction_laser->max ) - initial_arpen ) * initial_armor_mult, 0.0f );
         } else {
-            dam -= rng( ri.reduction.min, ri.reduction.max );
-            if( dam > ri.destroy_threshold ) {
+            // Roll damage reduction value, reduce result by arpen, multiply by any armor mult, then finally set to zero if negative result
+            dam -= std::max( ( rng( rfi.reduction.min,
+                                    rfi.reduction.max ) - initial_arpen ) * initial_armor_mult, 0.0f );
+            // Only print if we hit something we can see enemies through, so we know cover did its job
+            if( get_avatar().sees( p ) && rfi.block_unaimed_chance < 100_pct ) {
+                if( dam <= 0 ) {
+                    add_msg( _( "The shot is stopped by the %s!" ), furnname( p ) );
+                } else {
+                    add_msg( _( "The shot hits the %s and punches through!" ), furnname( p ) );
+                }
+            }
+            if( destroy_roll > rfi.destroy_threshold ) {
+                bash_params params{0, false, true, hit_items, 1.0, false};
+                bash_furn_success( p, params );
+            }
+            if( rfi.flammable && inc ) {
+                add_field( p, fd_fire, 1 );
+            }
+        }
+    } else if( ter.bash.ranged ) {
+        double range = rl_dist( origin, p );
+        const ranged_bash_info &ri = *ter.bash.ranged;
+        float destroy_roll = dam * rng_float( 0.9, 1.1 );
+        if( !hit_items && ( !check( ri.block_unaimed_chance ) || ( ri.block_unaimed_chance < 100_pct &&
+                            range <= 1 ) ) ) {
+            // Nothing, it's a miss or we're shooting over nearby terrain
+        } else if( ri.reduction_laser && proj.has_effect( ammo_effect_LASER ) ) {
+            dam -= std::max( ( rng( ri.reduction_laser->min,
+                                    ri.reduction_laser->max ) - initial_arpen ) * initial_armor_mult, 0.0f );
+        } else {
+            // Roll damage reduction value, reduce result by arpen, multiply by any armor mult, then finally set to zero if negative result
+            dam -= std::max( ( rng( ri.reduction.min,
+                                    ri.reduction.max ) - initial_arpen ) * initial_armor_mult, 0.0f );
+            // Only print if we hit something we can see enemies through, so we know cover did its job
+            if( get_avatar().sees( p ) && ri.block_unaimed_chance < 100_pct ) {
+                if( dam <= 0 ) {
+                    add_msg( _( "The shot is stopped by the %s!" ), tername( p ) );
+                } else {
+                    add_msg( _( "The shot hits the %s and punches through!" ), tername( p ) );
+                }
+            }
+            if( destroy_roll > ri.destroy_threshold ) {
                 bash_params params{0, false, true, hit_items, 1.0, false};
                 bash_ter_success( p, params );
-            }
-            if( dam <= 0 && is_transparent( p ) && get_avatar().sees( p ) ) {
-                add_msg( _( "The shot is stopped by the %s!" ), tername( p ) );
             }
             if( ri.flammable && inc ) {
                 add_field( p, fd_fire, 1 );
@@ -3902,7 +3953,7 @@ void map::shoot( const tripoint &p, projectile &proj, const bool hit_items )
         damage_message = _( "flying projectile" );
     }
 
-    smash_trap( p, dam, damage_message );
+    smash_trap( p, dam, string_format( _( "The %1$s" ), damage_message ) );
     smash_items( p, dam, damage_message, false );
 }
 
@@ -4543,10 +4594,12 @@ detached_ptr<item> map::water_from( const tripoint &p )
     if( furn( p ).obj().examine == &iexamine::water_source ) {
         return item::spawn( "water", calendar::start_of_cataclysm, item::INFINITE_CHARGES );
     }
-    if( furn( p ).obj().examine == &iexamine::clean_water_source ) {
+    if( furn( p ).obj().examine == &iexamine::clean_water_source ||
+        terrain_id.obj().examine == &iexamine::clean_water_source ) {
         return item::spawn( "water_clean", calendar::start_of_cataclysm, item::INFINITE_CHARGES );
     }
     if( furn( p ).obj().examine == &iexamine::liquid_source ) {
+        // Terrains have no "provides_liquids" to work with generic source
         return item::spawn( furn( p ).obj().provides_liquids, calendar::turn, item::INFINITE_CHARGES );
     }
     return detached_ptr<item>();

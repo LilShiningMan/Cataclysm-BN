@@ -126,32 +126,28 @@ static const fault_id fault_gun_chamber_spent( "fault_gun_chamber_spent" );
 static const fault_id fault_gun_dirt( "fault_gun_dirt" );
 static const fault_id fault_gun_unlubricated( "fault_gun_unlubricated" );
 
-static const skill_id skill_archery( "archery" );
 static const skill_id skill_driving( "driving" );
 static const skill_id skill_gun( "gun" );
 static const skill_id skill_launcher( "launcher" );
 static const skill_id skill_pistol( "pistol" );
 static const skill_id skill_rifle( "rifle" );
-static const skill_id skill_shotgun( "shotgun" );
-static const skill_id skill_smg( "smg" );
 static const skill_id skill_throw( "throw" );
 
 static const bionic_id bio_railgun( "bio_railgun" );
 static const bionic_id bio_targeting( "bio_targeting" );
 static const bionic_id bio_ups( "bio_ups" );
 
-
-static const std::string flag_MOUNTABLE( "MOUNTABLE" );
-
 static const trait_id trait_PYROMANIA( "PYROMANIA" );
 static const trait_id trait_NORANGEDCRIT( "NO_RANGED_CRIT" );
+
+// not to confuse with item flags (json_flag)
+static const std::string flag_SHOOT_ME( "SHOOT_ME" );
 
 // Maximum duration of aim-and-fire loop, in turns
 static constexpr int AIF_DURATION_LIMIT = 10;
 
 static projectile make_gun_projectile( const item &gun );
 static void cycle_action( item &weap, const tripoint &pos );
-bool can_use_bipod( const map &m, const tripoint &pos );
 dispersion_sources calculate_dispersion( const map &m, const Character &who, const item &gun,
         int at_recoil, bool burst );
 
@@ -776,27 +772,52 @@ void npc::pretend_fire( npc *source, int shots, item &gun )
     }
 }
 
-bool can_use_bipod( const map &m, const tripoint &pos )
+
+namespace
+{
+
+auto is_mountable( const map &m, const tripoint &pos ) -> bool
 {
     // usage of any attached bipod is dependent upon terrain
-    if( m.has_flag_ter_or_furn( "MOUNTABLE", pos ) ) {
+    // only allow mounting passable OR climable terrain
+    // example: sandbag barricades are impassable but climbable
+    if( ( m.climb_difficulty( pos ) <= 5 || m.passable( pos ) ) &&
+        m.has_flag_ter_or_furn( "MOUNTABLE", pos ) ) {
         return true;
     }
 
     if( const optional_vpart_position vp = m.veh_at( pos ) ) {
-        return vp->vehicle().has_part( pos, "MOUNTABLE" );
+        // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
+        return m.passable( pos ) && vp->vehicle().has_part( pos, "MOUNTABLE" );
     }
-
     return false;
 }
+
+auto is_mountable_nearby( const map &m, const tripoint &pos ) -> bool
+{
+    const auto &xs = closest_points_first( pos, 1 );
+    return std::any_of( xs.begin(), xs.end(),
+                        [&m]( const tripoint & x ) -> bool { return is_mountable( m, x ); } );
+}
+
+auto can_use_heavy_weapon( const Character &who, const map &m, const tripoint &pos ) -> bool
+{
+    if( who.is_mounted() && who.mounted_creature->has_flag( MF_RIDEABLE_MECH ) ) {
+        return true;
+    }
+    return is_mountable_nearby( m, pos );
+}
+
+} // namespace
+
 
 dispersion_sources calculate_dispersion( const map &m, const Character &who, const item &gun,
         int at_recoil, bool burst )
 {
-    bool bipod = can_use_bipod( m, who.pos() );
+    const bool bipod = can_use_heavy_weapon( who, m, who.pos() );
 
-    int gun_recoil = gun.gun_recoil( bipod );
-    int eff_recoil = at_recoil + ( burst ? ranged::burst_penalty( who, gun, gun_recoil ) : 0 );
+    const int gun_recoil = gun.gun_recoil( bipod );
+    const int eff_recoil = at_recoil + ( burst ? ranged::burst_penalty( who, gun, gun_recoil ) : 0 );
     dispersion_sources dispersion( ranged::get_weapon_dispersion( who, gun ) );
     dispersion.add_range( eff_recoil );
     return dispersion;
@@ -939,15 +960,18 @@ int ranged::fire_gun( Character &who, const tripoint &target, int max_shots, ite
         // Reset aim for bows and other reload-and-shoot weapons.
         who.recoil = MAX_RECOIL;
     } else {
+        // Hack alert: nearly every other use of can_use_heavy_weapon uses const character, except this one and gunmode_checks_weapon.
+        const Character &shooter = who;
         // Now actually apply recoil for the future shots
         // But only for one shot, because bursts kinda suck
-        int gun_recoil = gun.gun_recoil( can_use_bipod( here, who.pos() ) );
+        int gun_recoil = gun.gun_recoil( can_use_heavy_weapon( shooter, here, shooter.pos() ) );
 
-        // If user is currently able to fire a mounted gun freely, penalize recoil based on size class.
-        if( gun.has_flag( flag_MOUNTED_GUN ) && !can_use_bipod( here, who.pos() ) ) {
-            if( who.get_size() == MS_HUGE ) {
+        // If user is currently able to fire a mounted gun freely, penalize dispersion
+        // HEAVY_WEAPON_SUPPORT flag has highest penalty, Large mutants lower penalty, no penalty for Huge mutants.
+        if( gun.has_flag( flag_MOUNTED_GUN ) && !can_use_heavy_weapon( shooter, here, shooter.pos() ) ) {
+            if( who.get_size() == MS_LARGE ) {
                 gun_recoil = gun_recoil * 2;
-            } else {
+            } else if( who.worn_with_flag( flag_HEAVY_WEAPON_SUPPORT ) && ( who.get_size() <= MS_MEDIUM ) ) {
                 gun_recoil = gun_recoil * 3;
             }
         }
@@ -1943,12 +1967,13 @@ dispersion_sources ranged::get_weapon_dispersion( const Character &who, const it
         dispersion.add_multiplier( 4 );
     }
 
-    // If user is currently able to fire a mounted gun freely, penalize dispersion based on size class.
-    if( obj.has_flag( flag_MOUNTED_GUN ) && !can_use_bipod( get_map(), who.pos() ) ) {
-        if( who.get_size() == MS_HUGE ) {
-            dispersion.add_multiplier( 2 );
-        } else {
-            dispersion.add_multiplier( 3 );
+    // If user is currently able to fire a mounted gun freely, penalize dispersion
+    // HEAVY_WEAPON_SUPPORT flag has highest penalty, Large mutants lower penalty, no penalty for Huge mutants.
+    if( obj.has_flag( flag_MOUNTED_GUN ) && !can_use_heavy_weapon( who, get_map(), who.pos() ) ) {
+        if( who.get_size() == MS_LARGE ) {
+            dispersion.add_range( 500 );
+        } else if( who.worn_with_flag( flag_HEAVY_WEAPON_SUPPORT ) && ( who.get_size() <= MS_MEDIUM ) ) {
+            dispersion.add_range( 1000 );
         }
     }
 
@@ -2067,6 +2092,7 @@ double ranged::recoil_vehicle( const Character &who )
 
     if( who.in_vehicle ) {
         if( const optional_vpart_position vp = get_map().veh_at( who.pos() ) ) {
+            // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
             return static_cast<double>( std::abs( vp->vehicle().velocity ) ) * 3 / 100;
         }
     }
@@ -2109,7 +2135,7 @@ std::vector<Creature *> targetable_creatures( const Character &c, const int rang
         }
 
         // TODO: get rid of fake npcs (pos() check)
-        if( &c == &critter || c.pos() == critter.pos() || c.attitude_to( critter ) == Creature::Attitude::A_FRIENDLY )
+        if( &c == &critter || c.pos() == critter.pos() || c.attitude_to( critter ) == Attitude::A_FRIENDLY )
         {
             return false;
         }
@@ -2734,7 +2760,8 @@ tripoint target_ui::choose_initial_target()
     const std::vector<tripoint> nearby = closest_points_first( src, range );
     const auto target_spot = std::find_if( nearby.begin(), nearby.end(),
     [this, &here]( const tripoint & pt ) {
-        return here.tr_at( pt ).id == tr_practice_target && this->you->sees( pt );
+        return ( here.has_flag_ter_or_furn( flag_SHOOT_ME, pt ) ||
+                 here.tr_at( pt ).id == tr_practice_target ) && this->you->sees( pt );
     } );
     if( target_spot != nearby.end() ) {
         return *target_spot;
@@ -2874,10 +2901,10 @@ std::vector<weak_ptr_fast<Creature>> target_ui::list_friendlies_in_lof()
         if( p != dst && p != src ) {
             Creature *cr = g->critter_at( p, true );
             if( cr && you->sees( *cr ) ) {
-                Creature::Attitude a = cr->attitude_to( *this->you );
+                Attitude a = cr->attitude_to( *this->you );
                 if(
-                    ( cr->is_npc() && a != Creature::A_HOSTILE ) ||
-                    ( !cr->is_npc() && a == Creature::A_FRIENDLY )
+                    ( cr->is_npc() && a != Attitude::A_HOSTILE ) ||
+                    ( !cr->is_npc() && a == Attitude::A_FRIENDLY )
                 ) {
                     ret.emplace_back( g->shared_from( *cr ) );
                 }
@@ -3727,8 +3754,8 @@ bool ranged::gunmode_checks_common( avatar &you, const map &m, std::vector<std::
     return result;
 }
 
-bool ranged::gunmode_checks_weapon( avatar &you, const map &m, std::vector<std::string> &messages,
-                                    const gun_mode &gmode )
+auto ranged::gunmode_checks_weapon( avatar &you, const map &m, std::vector<std::string> &messages,
+                                    const gun_mode &gmode ) -> bool
 {
     bool result = true;
 
@@ -3772,16 +3799,9 @@ bool ranged::gunmode_checks_weapon( avatar &you, const map &m, std::vector<std::
     }
 
     if( gmode->has_flag( flag_MOUNTED_GUN ) ) {
-
-        bool mech_mount = false;
-        if( you.is_mounted() && you.mounted_creature->has_flag( MF_RIDEABLE_MECH ) ) {
-            mech_mount = true;
-        }
-
-        const bool v_mountable = static_cast<bool>( m.veh_at( you.pos() ).part_with_feature( "MOUNTABLE",
-                                 true ) );
-        bool t_mountable = m.has_flag_ter_or_furn( flag_MOUNTABLE, you.pos() );
-        if( !mech_mount && !t_mountable && !v_mountable && !( you.get_size() > MS_MEDIUM ) ) {
+        const Character &shooter = you;
+        if( !can_use_heavy_weapon( shooter, m, shooter.pos() ) && !( you.get_size() > MS_MEDIUM ) &&
+            !you.worn_with_flag( flag_HEAVY_WEAPON_SUPPORT ) ) {
             messages.push_back( string_format(
                                     _( "You must stand near acceptable terrain or furniture to fire the %s.  A table, a mound of dirt, a broken window, etc." ),
                                     gmode->tname() ) );
@@ -3886,25 +3906,18 @@ double ranged::aim_speed_encumbrance_modifier( const Character &who )
     return ( who.encumb( bp_hand_l ) + who.encumb( bp_hand_r ) ) / 10.0;
 }
 
-double ranged::aim_cap_from_volume( const item &gun )
+double ranged::aim_multiplier_from_volume( const item &gun )
 {
-    skill_id gun_skill = gun.gun_skill();
-    double aim_cap = std::min( 49.0, 49.0 - static_cast<float>( gun.volume() / 75_ml ) );
-    // TODO: also scale with skill level.
-    if( gun_skill == skill_smg ) {
-        aim_cap = std::max( 12.0, aim_cap );
-    } else if( gun_skill == skill_shotgun ) {
-        aim_cap = std::max( 12.0, aim_cap );
-    } else if( gun_skill == skill_pistol ) {
-        aim_cap = std::max( 15.0, aim_cap * 1.25 );
-    } else if( gun_skill == skill_rifle ) {
-        aim_cap = std::max( 7.0, aim_cap - 5.0 );
-    } else if( gun_skill == skill_archery ) {
-        aim_cap = std::max( 13.0, aim_cap );
-    } else { // Launchers, etc.
-        aim_cap = std::max( 10.0, aim_cap );
+    // Penalty scales linearly as volume increases
+    // 1 liters = multiplier of 0.9
+    // 5 liters = multiplier of 0.5
+    // Return early with maximum penalty of 0.1 at 9 liters and above.
+    if( gun.volume() >= 9_liter ) {
+        return 0.1f;
     }
-    return aim_cap;
+    double aim_mult = ( 10000.0 - static_cast<float>( gun.volume() / 1_ml ) ) / 10000.0;
+    // TODO: also scale with skill level?
+    return aim_mult;
 }
 
 double ranged::aim_per_move( const Character &who, const item &gun, double recoil )
@@ -3941,7 +3954,7 @@ double ranged::aim_per_move( const Character &who, const item &gun, double recoi
     // Each 5 points (combined) of hand encumbrance decreases aim speed by one unit.
     aim_speed -= aim_speed_encumbrance_modifier( who );
 
-    aim_speed = std::min( aim_speed, aim_cap_from_volume( gun ) );
+    aim_speed *= aim_multiplier_from_volume( gun );
 
     // Just a raw scaling factor.
     aim_speed *= 6.5;

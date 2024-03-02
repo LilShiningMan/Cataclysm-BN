@@ -169,7 +169,7 @@
       { "id": "WRENCH", "level": 1 },
       { "id": "GLARE", "level": 2 }
     ],
-    "tools": [ [ [ "welder", 100 ], [ "welder_crude", 150 ], [ "toolset", 150 ], [ "soldering_iron", 150 ] ] ],
+    "tools": [ [ [ "welder", 100 ], [ "toolset", 150 ], [ "soldering_iron", 150 ] ] ],
     "components": [ [ [ "steel_chunk", 6 ], [ "scrap", 18 ] ], [ [ "pipe", 2 ] ] ]
   },
   {
@@ -473,6 +473,28 @@
     ]
   },
   {
+    "type": "uncraft",
+    "result": "plut_generator_item",
+    "skill_used": "electronics",
+    "difficulty": 4,
+    "time": "60 m",
+    "using": [ [ "welding_standard", 8 ] ],
+    "qualities": [ { "id": "HAMMER", "level": 2 }, { "id": "SCREW", "level": 1 }, { "id": "SAW_M", "level": 1 } ],
+    "components": [
+      [ [ "minireactor", 1 ] ],
+      [ [ "RAM", 8 ] ],
+      [ [ "cable", 16 ] ],
+      [ [ "small_lcd_screen", 4 ] ],
+      [ [ "large_lcd_screen", 1 ] ],
+      [ [ "e_scrap", 24 ] ],
+      [ [ "circuit", 10 ] ],
+      [ [ "power_supply", 8 ] ],
+      [ [ "amplifier", 6 ] ],
+      [ [ "plut_cell", 8 ] ],
+      [ [ "scrap", 16 ] ]
+    ]
+  },
+  {
     "result": "sarcophagus_access_code",
     "type": "recipe",
     "category": "CC_OTHER",
@@ -502,5 +524,16 @@
     "using": [ [ "welding_standard", 6 ], [ "sewing_standard", 12 ] ],
     "qualities": [ { "id": "HAMMER_FINE", "level": 1 }, { "id": "SAW_M_FINE", "level": 1 }, { "id": "DRILL", "level": 2 } ],
     "components": [ [ [ "material_aluminium_ingot", 20 ] ], [ [ "sheet", 1 ] ] ]
+  },
+  {
+    "result": "fuel_briquette",
+    "type": "recipe",
+    "category": "CC_OTHER",
+    "subcategory": "CSC_OTHER_OTHER",
+    "skill_used": "fabrication",
+    "time": "5 m",
+    "autolearn": true,
+    "reversible": true,
+    "components": [ [ [ "withered", 12 ], [ "straw_pile", 12 ] ] ]
   }
 ]

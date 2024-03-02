@@ -66,8 +66,8 @@ TEST_CASE( "stacking_cash_cards", "[item]" )
 
 TEST_CASE( "stacking_over_time", "[item]" )
 {
-    item &A = *item::spawn_temporary( "neccowafers" );
-    item &B = *item::spawn_temporary( "neccowafers" );
+    item &A = *item::spawn_temporary( "bologna" );
+    item &B = *item::spawn_temporary( "bologna" );
 
     GIVEN( "Two items with the same birthday" ) {
         REQUIRE( A.stacks_with( B ) );
@@ -166,4 +166,19 @@ TEST_CASE( "magazine_copyfrom_extends", "[item]" )
     item gun( "glock_19" );
     CHECK( gun.magazine_compatible().count( itype_id( "glockmag_test" ) ) > 0 );
     CHECK( gun.magazine_compatible().count( itype_id( "glockmag" ) ) > 0 );
+}
+
+TEST_CASE( "armor_override", "[item]" )
+{
+    item armor( "test_override_armor" );
+    CHECK( armor.bullet_resist() > 100 );
+    CHECK( armor.cut_resist() == 0 );
+}
+
+TEST_CASE( "armor_override_damaged", "[item]" )
+{
+    item armor_undamaged( "test_override_armor_damageable" );
+    item armor( "test_override_armor_damageable" );
+    armor.inc_damage();
+    CHECK( armor_undamaged.bullet_resist() > armor.bullet_resist() );
 }

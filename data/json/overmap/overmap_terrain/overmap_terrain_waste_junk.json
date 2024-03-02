@@ -69,6 +69,14 @@
   },
   {
     "type": "overmap_terrain",
+    "id": "toxic_dump_roof",
+    "name": "toxic waste dump roof",
+    "sym": "D",
+    "color": "pink",
+    "see_cost": 2
+  },
+  {
+    "type": "overmap_terrain",
     "id": [
       "haz_sar_1_1",
       "haz_sar_1_2",
@@ -282,5 +290,13 @@
     "name": "abandoned textile mill",
     "color": "light_blue",
     "extend": { "flags": [ "SOURCE_CONSTRUCTION" ] }
+  },
+  {
+    "type": "overmap_terrain",
+    "id": [ "smallscrapyard_ocu" ],
+    "name": "scrap yard",
+    "sym": "s",
+    "color": "red",
+    "flags": [ "SOURCE_PEOPLE" ]
   }
 ]

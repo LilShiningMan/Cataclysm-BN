@@ -9,6 +9,7 @@
 
 #include "cata_utility.h"
 #include "debug.h"
+#include "game_constants.h"
 #include "item.h"
 #include "json.h"
 #include "options.h"
@@ -220,6 +221,13 @@ bool Skill::is_contextual_skill() const
     return _tags.count( contextual_skill ) > 0;
 }
 
+// used to check NPC weapon skills for determining starting weapon
+bool Skill::is_weapon_skill() const
+{
+    static const std::string weapon_skill( "weapon_skill" );
+    return _tags.count( weapon_skill ) > 0;
+}
+
 void SkillLevel::train( int amount, bool skip_scaling )
 {
     // Working off rust to regain levels goes twice as fast as reaching levels in the first place
@@ -310,7 +318,7 @@ void SkillLevel::readBook( int minimumGain, int maximumGain, int maximumLevel )
 
 bool SkillLevel::can_train() const
 {
-    return get_option<float>( "SKILL_TRAINING_SPEED" ) > 0.0;
+    return ( get_option<float>( "SKILL_TRAINING_SPEED" ) > 0.0 && _level < MAX_SKILL );
 }
 
 const SkillLevel &SkillLevelMap::get_skill_level_object( const skill_id &ident ) const

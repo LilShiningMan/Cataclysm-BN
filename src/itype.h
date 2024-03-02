@@ -21,6 +21,7 @@
 #include "explosion.h"
 #include "game_constants.h"
 #include "iuse.h" // use_function
+#include "mapdata.h"
 #include "pldata.h" // add_type
 #include "shape.h"
 #include "stomach.h"
@@ -260,9 +261,15 @@ struct islot_armor {
     */
     bool sided = false;
     /**
-     * TODO: document me.
+     * Multiplier on resistances provided by armor's materials.
+     * Damaged armors have lower effective thickness, low capped at 1.
+     * Note: 1 thickness means item retains full resistance when damaged.
      */
     int thickness = 0;
+    /**
+     * Damage negated by this armor. Usually calculated from materials+thickness.
+     */
+    resistances resistance;
     /**
      * Resistance to environmental effects.
      */
@@ -765,7 +772,10 @@ struct islot_seed {
      * Additionally items (a list of their item ids) that will spawn when harvesting the plant.
      */
     std::vector<itype_id> byproducts;
-
+    /**
+     * Terrain tag required to plant the seed.
+     */
+    std::string required_terrain_flag = "PLANTABLE";
     islot_seed() = default;
 };
 

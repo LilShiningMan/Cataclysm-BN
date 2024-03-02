@@ -507,7 +507,7 @@ Creature *Creature::auto_find_hostile_target( int range, int &boo_hoo, int area 
             // Helps avoid (possibly expensive) attitude calculation
             continue;
         }
-        if( m->attitude_to( u ) == A_HOSTILE ) {
+        if( m->attitude_to( u ) == Attitude::A_HOSTILE ) {
             target_rating = ( mon_rating + hostile_adj ) / dist;
             if( maybe_boo ) {
                 boo_hoo++;
@@ -720,6 +720,31 @@ dealt_damage_instance hit_with_aoe( Creature &target, Creature *source, const da
 
 } // namespace ranged
 
+namespace
+{
+
+auto get_stun_srength( const projectile &proj, m_size size ) -> int
+{
+    const int stun_strength = proj.has_effect( ammo_effect_BEANBAG ) ? 4
+                              : proj.has_effect( ammo_effect_LARGE_BEANBAG ) ? 16
+                              : 0;
+
+    switch( size ) {
+        case MS_TINY:
+            return stun_strength * 4;
+        case MS_SMALL:
+            return stun_strength * 2;
+        case MS_MEDIUM:
+        default:
+            return stun_strength;
+        case MS_LARGE:
+            return stun_strength / 2;
+        case MS_HUGE:
+            return stun_strength / 4;
+    }
+}
+} // namespace
+
 /**
  * Attempts to harm a creature with a projectile.
  *
@@ -894,44 +919,31 @@ void Creature::deal_projectile_attack( Creature *source, dealt_projectile_attack
         }
     }
 
-    if( bp_hit == bodypart_str_id( "head" ) && proj.has_effect( ammo_effect_BLINDS_EYES ) ) {
+    // at least `dealt_dam` doesn't get mutated after this point
+    const int total_damage = dealt_dam.total_damage();
+    const int env_resist = get_env_resist( bp_hit );
+
+    const int blind_strength = bp_hit == bodypart_str_id( "head" )
+                               && proj.has_effect( ammo_effect_BLINDS_EYES ) ? total_damage - env_resist : 0;
+    if( blind_strength > 0 ) {
         // TODO: Change this to require bp_eyes
         add_env_effect( effect_blind, bp_eyes, 5, rng( 3_turns, 10_turns ) );
     }
 
-    if( proj.has_effect( ammo_effect_APPLY_SAP ) ) {
-        add_effect( effect_sap, 1_turns * dealt_dam.total_damage() );
+    const int sap_strength = proj.has_effect( ammo_effect_APPLY_SAP ) ? total_damage - env_resist : 0;
+    if( sap_strength > 0 ) {
+        add_effect( effect_sap, 1_turns * sap_strength );
     }
-    if( proj.has_effect( ammo_effect_PARALYZEPOISON ) && dealt_dam.total_damage() > 0 ) {
+
+    const int paralysis_strength = proj.has_effect( ammo_effect_PARALYZEPOISON )
+                                   ? total_damage - env_resist : 0;
+    if( paralysis_strength > 0 ) {
         add_msg_if_player( m_bad, _( "You feel poison coursing through your body!" ) );
         add_effect( effect_paralyzepoison, 5_minutes );
     }
 
-    int stun_strength = 0;
-    if( proj.has_effect( ammo_effect_BEANBAG ) ) {
-        stun_strength = 4;
-    }
-    if( proj.has_effect( ammo_effect_LARGE_BEANBAG ) ) {
-        stun_strength = 16;
-    }
+    const int stun_strength = get_stun_srength( proj, get_size() ) - get_env_resist( bp_hit );
     if( stun_strength > 0 ) {
-        switch( get_size() ) {
-            case MS_TINY:
-                stun_strength *= 4;
-                break;
-            case MS_SMALL:
-                stun_strength *= 2;
-                break;
-            case MS_MEDIUM:
-            default:
-                break;
-            case MS_LARGE:
-                stun_strength /= 2;
-                break;
-            case MS_HUGE:
-                stun_strength /= 4;
-                break;
-        }
         add_effect( effect_stunned, 1_turns * rng( stun_strength / 2, stun_strength ) );
     }
 
@@ -1349,6 +1361,17 @@ int Creature::get_effect_int( const efftype_id &eff_id, body_part bp ) const
 
     return 0;
 }
+
+struct removed_effect {
+    public:
+        removed_effect( efftype_id type, bodypart_str_id bp, bool is_decayed ) :
+            type( type ), bp( bp ), is_decayed( is_decayed )
+        {}
+        efftype_id type;
+        bodypart_str_id bp;
+        bool is_decayed;
+};
+
 void Creature::process_effects()
 {
     process_effects_internal();
@@ -1356,24 +1379,26 @@ void Creature::process_effects()
     // id's and body_part's of all effects to be removed. If we ever get player or
     // monster specific removals these will need to be moved down to that level and then
     // passed in to this function.
-    std::vector<std::pair<efftype_id, bodypart_str_id>> to_remove;
+    std::vector<removed_effect> to_remove;
+
+    std::vector<effect> to_add;
 
     // Decay/removal of effects
     for( auto &elem : *effects ) {
         for( auto &_it : elem.second ) {
             if( _it.second.is_removed() ) {
-                to_remove.emplace_back( elem.first, _it.first );
+                to_remove.emplace_back( elem.first, _it.first, false );
                 continue;
             }
             // Add any effects that others remove to the removal list
             for( const efftype_id &removed_effect : _it.second.get_removes_effects() ) {
-                to_remove.emplace_back( removed_effect, bodypart_str_id::NULL_ID() );
+                to_remove.emplace_back( removed_effect, bodypart_str_id::NULL_ID(), false );
             }
             effect &e = _it.second;
             const int prev_int = e.get_intensity();
             // Run decay effects, marking effects for removal as necessary.
             if( e.decay( calendar::turn, is_player() ) ) {
-                to_remove.emplace_back( elem.first, _it.first );
+                to_remove.emplace_back( elem.first, _it.first, true );
             }
 
             if( e.get_intensity() != prev_int && e.get_duration() > 0_turns ) {
@@ -1383,20 +1408,46 @@ void Creature::process_effects()
     }
 
     // Run the on-remove effects
-    for( const std::pair<efftype_id, bodypart_str_id> &r : to_remove ) {
-        remove_effect( r.first, r.second );
-    }
-    // Actually remove effects. This should be the last thing done in process_effects().
-    for( const std::pair<efftype_id, bodypart_str_id> &r : to_remove ) {
-        if( !r.second ) {
-            effects->erase( r.first );
-        } else {
-            ( *effects )[r.first].erase( r.second );
-            // If there are no more effects of a given type remove the type map
-            if( ( *effects )[r.first].empty() ) {
-                effects->erase( r.first );
+    for( const removed_effect &r : to_remove ) {
+        const auto &add_after = r.type->get_effects_on_remove();
+        if( !add_after.empty() ) {
+            bool found = false;
+            // Copypasted from get_effect, but without check for `removed` flag
+            auto got_outer = effects->find( r.type );
+            if( got_outer != effects->end() ) {
+                auto got_inner = got_outer->second.find( convert_bp( r.bp->token ) );
+                if( got_inner != got_outer->second.end() ) {
+                    const auto &parent = got_inner->second;
+                    const auto &decay_effects = r.is_decayed ?
+                                                parent.create_decay_effects() :
+                                                parent.create_removal_effects();
+                    to_add.insert( to_add.end(), decay_effects.begin(), decay_effects.end() );
+                    found = true;
+                }
+            }
+
+            if( !found ) {
+                debugmsg( "Couldn't find effect to remove %s", r.type.str() );
             }
         }
+
+        remove_effect( r.type, r.bp );
+    }
+    // Actually remove effects. This should be the last thing done in process_effects().
+    for( const removed_effect &r : to_remove ) {
+        if( !r.bp ) {
+            effects->erase( r.type );
+        } else {
+            ( *effects )[r.type].erase( r.bp );
+            // If there are no more effects of a given type remove the type map
+            if( ( *effects )[r.type].empty() ) {
+                effects->erase( r.type );
+            }
+        }
+    }
+
+    for( const effect &eff : to_add ) {
+        add_effect( eff );
     }
 }
 
@@ -1965,11 +2016,11 @@ void Creature::check_dead_state()
 std::string Creature::attitude_raw_string( Attitude att )
 {
     switch( att ) {
-        case Creature::A_HOSTILE:
+        case Attitude::A_HOSTILE:
             return "hostile";
-        case Creature::A_NEUTRAL:
+        case Attitude::A_NEUTRAL:
             return "neutral";
-        case Creature::A_FRIENDLY:
+        case Attitude::A_FRIENDLY:
             return "friendly";
         default:
             return "other";

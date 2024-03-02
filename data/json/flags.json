@@ -439,6 +439,12 @@
     "info": "This clothing is large enough to accommodate <info>abnormally large mutated anatomy</info>."
   },
   {
+    "id": "resized_large",
+    "type": "json_flag",
+    "context": [ "ARMOR", "TOOL_ARMOR" ],
+    "info": "This gear has been modified to accommodate <info>abnormally large mutated anatomy</info> with some <bad>increase to encumbrance</bad>."
+  },
+  {
     "id": "UNDERSIZE",
     "type": "json_flag",
     "context": [ "ARMOR", "TOOL_ARMOR" ],
@@ -676,8 +682,7 @@
     "id": "COMPACT",
     "type": "json_flag",
     "context": [ "ARMOR", "TOOL_ARMOR" ],
-    "//": "Prevents the item from participating in the layering encumbrance system when worn.",
-    "info": "It is designed not to interfere with other equipment in the same layer."
+    "//": "Prevents the item from participating in the layering encumbrance system when worn."
   },
   {
     "id": "SHEATH_AXE",
@@ -1573,7 +1578,7 @@
     "id": "MOUNTED_GUN",
     "type": "json_flag",
     "context": [  ],
-    "info": "This weapon is <bad>too unwieldy</bad> to fire on its own and <info>must be mounted</info> on a vehicle or furniture (window, table, mound of dirt, etc.) before use, <info>Large or Huge</info> mutants can fire from the hip with <bad>reduced accuracy.</bad>"
+    "info": "This weapon <bad>can only be fired if mounted</bad> on a vehicle or furniture (window, table, mound of dirt, etc.) to fire, <info>Large or Huge</info> mutants or those with active <info>Power Armor</info> can fire from the hip with <bad>reduced accuracy.</bad>"
   },
   {
     "id": "MYCUS_OK",
@@ -2036,6 +2041,12 @@
     "id": "MODE_BURST",
     "type": "json_flag",
     "context": [  ]
+  },
+  {
+    "id": "HEAVY_WEAPON_SUPPORT",
+    "type": "json_flag",
+    "context": [  ],
+    "info": "This equipment <good>allows you to fire</good> unwieldy weapons without requiring support from mountable terrain, as a <info>Large or Huge</info> mutant could, at the expense of <bad>reduced accuracy.</bad>"
   },
   {
     "id": "FIRE_TWOHAND",

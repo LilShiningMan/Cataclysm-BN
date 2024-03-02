@@ -1285,7 +1285,7 @@ item::sizing item::get_sizing( const Character &p ) const
         // may want to have fit be a flag that only applies if a piece of clothing is sized for you as there
         // is a bit of cognitive dissonance when something 'fits' and is 'oversized' and the same time
         const bool undersize = has_flag( flag_UNDERSIZE );
-        const bool oversize = has_flag( flag_OVERSIZE );
+        const bool oversize = has_flag( flag_OVERSIZE ) || has_flag( flag_resized_large );
 
         if( undersize ) {
             if( small ) {
@@ -2755,7 +2755,7 @@ void item::armor_fit_info( std::vector<iteminfo> &info, const iteminfo_query *pa
                         break;
                     case sizing::small_sized_big_char:
                     case sizing::human_sized_big_char:
-                        resize_str = _( "<bad>can not be upsized</bad>" );
+                        resize_str = _( "<bad>can not be upsized</bad> without drastically altering it" );
                         break;
                     default:
                         break;
@@ -4104,7 +4104,7 @@ nc_color item::color_in_inventory( const player &p ) const
     } else if( active && !is_food() && !is_food_container() && !is_corpse() ) {
         // Active items show up as yellow
         ret = c_yellow;
-    } else if( is_corpse() && can_revive() ) {
+    } else if( is_corpse() && ( can_revive() || corpse->zombify_into ) && !has_flag( flag_PULPED ) ) {
         // Only reviving corpses are yellow
         ret = c_yellow;
     } else if( const item *food = get_food() ) {
@@ -4628,8 +4628,12 @@ std::string item::tname( unsigned int quantity, bool with_prefix, unsigned int t
             tagtext += _( " (unread)" );
         }
     }
-    if( has_var( "bionics_scanned_by" ) && has_flag( flag_CBM_SCANNED ) ) {
-        tagtext += _( " (bionic detected)" );
+    if( has_var( "bionics_scanned_by" ) ) {
+        if( has_flag( flag_CBM_SCANNED ) ) {
+            tagtext += _( " (bionic detected)" );
+        } else {
+            tagtext += _( " (scanned)" );
+        }
     }
     if( has_flag( flag_ETHEREAL_ITEM ) ) {
         tagtext += string_format( _( " (%s turns)" ), get_var( "ethereal" ) );
@@ -4653,6 +4657,9 @@ std::string item::tname( unsigned int quantity, bool with_prefix, unsigned int t
         }
     }
 
+    if( has_flag( flag_resized_large ) ) {
+        tagtext += _( " (XL)" );
+    }
     const sizing sizing_level = get_sizing( you );
 
     if( sizing_level == sizing::human_sized_small_char ) {
@@ -5582,8 +5589,10 @@ auto get_hourly_rotpoints_at_temp( const units::temperature temp ) -> int
     if( temp > 40_c ) {
         return 21240;
     }
-    const int temp_c = units::to_celsius( temp );
-    return rot_chart[temp_c];
+    // HACK: due to frequent fahrenheit <-> celsius conversion, 18C is actually 17.777C
+    // remove rounding after most of temperatures passed around are in `units::temperature`
+    const float temp_c = static_cast<float>( units::to_millidegree_celsius( temp ) ) / 1000;
+    return rot_chart[std::round( temp_c )];
 }
 
 auto item::calc_rot( time_point time, const units::temperature temp ) const -> time_duration
@@ -6049,26 +6058,42 @@ bool item::craft_has_charges()
 #pragma optimize( "", off )
 #endif
 
-int item::bash_resist( bool to_self ) const
+template<typename ResistGetter>
+static int phys_resist( const item &it, damage_type dt, clothing_mod_type cmt,
+                        ResistGetter resist_getter, bool to_self )
 {
-    if( is_null() ) {
+    if( it.is_null() ) {
         return 0;
     }
 
     float resist = 0;
-    float mod = get_clothing_mod_val( clothing_mod_type_bash );
     int eff_thickness = 1;
 
     // base resistance
     // Don't give reinforced items +armor, just more resistance to ripping
-    const int dmg = damage_level( 4 );
+    const int dmg = it.damage_level( 4 );
     const int eff_damage = to_self ? std::min( dmg, 0 ) : std::max( dmg, 0 );
-    eff_thickness = std::max( 1, get_thickness() - eff_damage );
+    eff_thickness = std::max( 1, it.get_thickness() - eff_damage );
 
-    const std::vector<const material_type *> mat_types = made_of_types();
+    float mod = it.get_clothing_mod_val( cmt );
+
+    std::optional<resistances> overriden_resistance = it.damage_resistance_override();
+    if( overriden_resistance ) {
+        float base_resistance = 0.0f;
+        auto iter = overriden_resistance->flat.find( dt );
+        if( iter != overriden_resistance->flat.end() ) {
+            base_resistance = iter->second;
+        }
+
+        float damaged_resistance = base_resistance * eff_thickness / it.get_thickness();
+
+        return std::lround( damaged_resistance + mod );
+    }
+
+    const std::vector<const material_type *> mat_types = it.made_of_types();
     if( !mat_types.empty() ) {
         for( const material_type *mat : mat_types ) {
-            resist += mat->bash_resist();
+            resist += ( mat->*resist_getter )();
         }
         // Average based on number of materials.
         resist /= mat_types.size();
@@ -6077,33 +6102,14 @@ int item::bash_resist( bool to_self ) const
     return std::lround( ( resist * eff_thickness ) + mod );
 }
 
+int item::bash_resist( bool to_self ) const
+{
+    return phys_resist( *this, DT_BASH, clothing_mod_type_bash, &material_type::bash_resist, to_self );
+}
+
 int item::cut_resist( bool to_self ) const
 {
-    if( is_null() ) {
-        return 0;
-    }
-
-    const int base_thickness = get_thickness();
-    float resist = 0;
-    float mod = get_clothing_mod_val( clothing_mod_type_cut );
-    int eff_thickness = 1;
-
-    // base resistance
-    // Don't give reinforced items +armor, just more resistance to ripping
-    const int dmg = damage_level( 4 );
-    const int eff_damage = to_self ? std::min( dmg, 0 ) : std::max( dmg, 0 );
-    eff_thickness = std::max( 1, base_thickness - eff_damage );
-
-    const std::vector<const material_type *> mat_types = made_of_types();
-    if( !mat_types.empty() ) {
-        for( const material_type *mat : mat_types ) {
-            resist += mat->cut_resist();
-        }
-        // Average based on number of materials.
-        resist /= mat_types.size();
-    }
-
-    return std::lround( ( resist * eff_thickness ) + mod );
+    return phys_resist( *this, DT_CUT, clothing_mod_type_cut, &material_type::cut_resist, to_self );
 }
 
 #if defined(_MSC_VER)
@@ -6118,31 +6124,8 @@ int item::stab_resist( bool to_self ) const
 
 int item::bullet_resist( bool to_self ) const
 {
-    if( is_null() ) {
-        return 0;
-    }
-
-    const int base_thickness = get_thickness();
-    float resist = 0;
-    float mod = get_clothing_mod_val( clothing_mod_type_bullet );
-    int eff_thickness = 1;
-
-    // base resistance
-    // Don't give reinforced items +armor, just more resistance to ripping
-    const int dmg = damage_level( 4 );
-    const int eff_damage = to_self ? std::min( dmg, 0 ) : std::max( dmg, 0 );
-    eff_thickness = std::max( 1, base_thickness - eff_damage );
-
-    const std::vector<const material_type *> mat_types = made_of_types();
-    if( !mat_types.empty() ) {
-        for( const material_type *mat : mat_types ) {
-            resist += mat->bullet_resist();
-        }
-        // Average based on number of materials.
-        resist /= mat_types.size();
-    }
-
-    return std::lround( ( resist * eff_thickness ) + mod );
+    return phys_resist( *this, DT_BULLET, clothing_mod_type_bullet, &material_type::bullet_resist,
+                        to_self );
 }
 
 int item::acid_resist( bool to_self, int base_env_resist ) const
@@ -6152,10 +6135,16 @@ int item::acid_resist( bool to_self, int base_env_resist ) const
         return INT_MAX;
     }
 
-    float resist = 0.0;
-    float mod = get_clothing_mod_val( clothing_mod_type_acid );
     if( is_null() ) {
         return 0.0;
+    }
+
+    float resist = 0.0;
+    float mod = get_clothing_mod_val( clothing_mod_type_acid );
+
+    std::optional<resistances> overriden_resistance = damage_resistance_override();
+    if( overriden_resistance ) {
+        return std::lround( overriden_resistance->flat[DT_ACID] + mod );
     }
 
     const std::vector<const material_type *> mat_types = made_of_types();
@@ -6186,11 +6175,18 @@ int item::fire_resist( bool to_self, int base_env_resist ) const
         return INT_MAX;
     }
 
-    float resist = 0.0;
-    float mod = get_clothing_mod_val( clothing_mod_type_fire );
     if( is_null() ) {
         return 0.0;
     }
+
+    float mod = get_clothing_mod_val( clothing_mod_type_fire );
+
+    std::optional<resistances> overriden_resistance = damage_resistance_override();
+    if( overriden_resistance ) {
+        return std::lround( overriden_resistance->flat[DT_HEAT] + mod );
+    }
+
+    float resist = 0.0;
 
     const std::vector<const material_type *> mat_types = made_of_types();
     if( !mat_types.empty() ) {
@@ -6227,6 +6223,15 @@ int item::chip_resistance( bool worst ) const
     }
 
     return res;
+}
+
+std::optional<resistances> item::damage_resistance_override() const
+{
+    if( is_null() || !type->armor ) {
+        return std::optional<resistances>();
+    }
+
+    return type->armor->resistance;
 }
 
 int item::min_damage() const
@@ -8177,9 +8182,7 @@ bool item::reload( player &u, item &loc, int qty )
             }
         }
 
-        detached_ptr<item> to_reload = item::spawn( *ammo );
-        to_reload->charges = qty;
-        ammo->charges -= qty;
+        detached_ptr<item> to_reload = ammo->split( qty );
         bool merged = false;
         for( item *it : contents.all_items_top() ) {
             if( it->merge_charges( std::move( to_reload ) ) ) {
@@ -8237,16 +8240,17 @@ bool item::reload( player &u, item &loc, int qty )
             ammo->charges -= qty;
             charges += qty;
         }
-    }
-
-    if( ammo->charges == 0 && !ammo->has_flag( flag_SPEEDLOADER ) ) {
-        if( container != nullptr ) {
-            container->remove_item( container->contents.front() );
-            u.inv_restack( ); // emptied containers do not stack with non-empty ones
-        } else {
-            loc.detach();
+        // we have transfered ammo from the container to the item
+        // therefore, we erase the 0-charge item inside container
+        // TODO: why don't we just remove 0-charge items?
+        if( ammo->charges == 0 && !ammo->has_flag( flag_SPEEDLOADER ) ) {
+            ammo->detach();
+            if( container != nullptr ) {
+                u.inv_restack();
+            }
         }
     }
+
     return true;
 }
 
@@ -8292,7 +8296,7 @@ float item::simulate_burn( fire_data &frd ) const
     }
 
     if( count_by_charges() ) {
-        int stack_burnt = rng( type->stack_size / 2, type->stack_size );
+        const int stack_burnt = type->stack_size;
         time_added *= stack_burnt;
         smoke_added *= stack_burnt;
         burn_added *= stack_burnt;
@@ -9014,7 +9018,7 @@ detached_ptr<item>  item::process_rot( detached_ptr<item> &&self, const bool sea
     // note we're also gated by item::processing_speed
     constexpr time_duration smallest_interval = 10_minutes;
 
-    units::temperature temp = units::from_fahrenheit( weather.get_temperature( pos ) );
+    units::temperature temp = weather.get_temperature( pos );
     temp = clip_by_temperature_flag( temp, flag );
 
     time_point time = self->last_rot_check;
@@ -9142,7 +9146,7 @@ detached_ptr<item> item::process_corpse( detached_ptr<item> &&self, player *carr
     if( self->corpse == nullptr || self->damage() >= self->max_damage() ) {
         return std::move( self );
     }
-    if( self->corpse->zombify_into && self->rotten() ) {
+    if( self->corpse->zombify_into && self->rotten() && !self->has_flag( flag_PULPED ) ) {
         self->rot -= self->get_shelf_life();
         self->corpse = &*self->corpse->zombify_into;
         return std::move( self );

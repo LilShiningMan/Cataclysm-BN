@@ -85,6 +85,7 @@
 #include "translations.h"
 #include "ui.h"
 #include "ui_manager.h"
+#include "url_utility.h"
 #include "units.h"
 #include "veh_type.h"
 #include "vehicle.h"
@@ -755,7 +756,8 @@ static void smash()
 
     bool should_pulp = false;
     for( const item * const &it : here.i_at( smashp ) ) {
-        if( it->is_corpse() && it->damage() < it->max_damage() && it->can_revive() ) {
+        if( it->is_corpse() && it->damage() < it->max_damage() && ( it->can_revive() ||
+                it->get_mtype()->zombify_into ) ) {
             if( it->get_mtype()->bloodType()->has_acid ) {
                 if( query_yn( _( "Are you sure you want to pulp an acid filled corpse?" ) ) ) {
                     should_pulp = true;
@@ -1074,11 +1076,11 @@ static void sleep()
     std::stringstream data;
     if( !active.empty() ) {
         as_m.selected = 2;
-        data << as_m.text << std::endl;
-        data << _( "You may want to extinguish or turn off:" ) << std::endl;
-        data << " " << std::endl;
+        data << as_m.text << '\n';
+        data << _( "You may want to extinguish or turn off:" ) << '\n';
+        data << " " << '\n';
         for( auto &a : active ) {
-            data << "<color_red>" << a << "</color>" << std::endl;
+            data << "<color_red>" << a << "</color>" << '\n';
         }
         as_m.text = data.str();
     }
@@ -2266,7 +2268,7 @@ bool game::handle_action()
 
             case ACTION_WHITELIST_ENEMY:
                 if( safe_mode == SAFE_MODE_STOP && !get_safemode().empty() ) {
-                    get_safemode().add_rule( get_safemode().lastmon_whitelist, Creature::A_ANY, 0, RULE_WHITELISTED );
+                    get_safemode().add_rule( get_safemode().lastmon_whitelist, Attitude::A_ANY, 0, RULE_WHITELISTED );
                     add_msg( m_info, _( "Creature whitelisted: %s" ), get_safemode().lastmon_whitelist );
                     set_safe_mode( SAFE_MODE_ON );
                     mostseen = 0;
@@ -2341,6 +2343,11 @@ bool game::handle_action()
 
             case ACTION_MESSAGES:
                 Messages::display_messages();
+                break;
+
+            case ACTION_OPEN_WIKI:
+                // TODO: un-hardcode URL
+                open_url( "https://docs.cataclysmbn.org" );
                 break;
 
             case ACTION_HELP:

@@ -24,6 +24,7 @@
 #include "creature.h"
 #include "cursesdef.h"
 #include "enums.h"
+#include "enum_traits.h"
 #include "faction.h"
 #include "game_constants.h"
 #include "int_id.h"
@@ -103,6 +104,11 @@ enum npc_attitude : int {
 std::string npc_attitude_id( npc_attitude );
 std::string npc_attitude_name( npc_attitude );
 
+template<>
+struct enum_traits<npc_attitude> {
+    static constexpr npc_attitude last = NPCATT_END;
+};
+
 // Attitudes are grouped by overall behavior towards player
 enum class attitude_group : int {
     neutral = 0, // Doesn't particularly mind the player
@@ -165,11 +171,16 @@ std::string npc_class_name_str( const npc_class_id & );
 
 enum npc_action : int;
 
-enum npc_need {
+enum npc_need : int {
     need_none,
     need_ammo, need_weapon, need_gun,
     need_food, need_drink, need_safety,
     num_needs
+};
+
+template<>
+struct enum_traits<npc_need> {
+    static constexpr npc_need last = num_needs;
 };
 
 // TODO: Turn the personality struct into a vector/map?
@@ -523,6 +534,11 @@ struct npc_short_term_cache {
     std::map<direction, float> threat_map;
     // Cache of locations the NPC has searched recently in npc::find_item()
     lru_cache<tripoint, int> searched_tiles;
+};
+
+struct npc_need_goal_cache {
+    tripoint_abs_omt goal;
+    tripoint_abs_omt omt_loc;
 };
 
 // DO NOT USE! This is old, use strings as talk topic instead, e.g. "TALK_AGREE_FOLLOW" instead of
@@ -1234,6 +1250,8 @@ class npc : public player
         std::map<std::string, time_point> complaints;
 
         npc_short_term_cache ai_cache;
+
+        std::map<npc_need, npc_need_goal_cache> goal_cache;
     public:
         /**
          * Global position, expressed in map square coordinate system

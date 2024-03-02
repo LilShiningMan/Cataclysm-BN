@@ -1,3 +1,4 @@
+#include "units_temperature.h"
 #if defined(TILES)
 #include "cata_tiles.h"
 
@@ -31,6 +32,7 @@
 #include "debug.h"
 #include "field.h"
 #include "field_type.h"
+#include "flag.h"
 #include "fstream_utils.h"
 #include "game.h"
 #include "game_constants.h"
@@ -1298,29 +1300,27 @@ void cata_tiles::draw( point dest, const tripoint &center, int width, int height
 
             // Add temperature value to the overlay_strings list for every visible tile when displaying temperature
             if( g->display_overlay_state( ACTION_DISPLAY_TEMPERATURE ) && !invis ) {
-                int temp_value = get_weather().get_temperature( {temp_x, temp_y, center.z} );
-                int ctemp = units::fahrenheit_to_celsius( temp_value );
+                const auto temp = get_weather().get_temperature( tripoint_abs_omt{temp_x, temp_y, center.z} );
                 short color;
                 const short bold = 8;
-                if( ctemp > 40 ) {
+                if( temp > 40_c ) {
                     color = catacurses::red;
-                } else if( ctemp > 25 ) {
+                } else if( temp > 25_c ) {
                     color = catacurses::yellow + bold;
-                } else if( ctemp > 10 ) {
+                } else if( temp > 10_c ) {
                     color = catacurses::green + bold;
-                } else if( ctemp > 0 ) {
+                } else if( temp > 0_c ) {
                     color = catacurses::white + bold;
-                } else if( ctemp > -10 ) {
+                } else if( temp > -10_c ) {
                     color = catacurses::cyan + bold;
                 } else {
                     color = catacurses::blue + bold;
                 }
-                if( get_option<std::string>( "USE_CELSIUS" ) == "celsius" ) {
-                    temp_value = units::fahrenheit_to_celsius( temp_value );
-                } else if( get_option<std::string>( "USE_CELSIUS" ) == "kelvin" ) {
-                    temp_value = units::fahrenheit_to_kelvin( temp_value );
+                const auto display_option = get_option<std::string>( "USE_CELSIUS" );
+                const int temp_value = display_option == "kelvin" ? units::to_kelvins( temp )
+                                       : display_option == "fahrenheit" ? units::to_fahrenheit( temp )
+                                       : units::to_celsius( temp );
 
-                }
                 overlay_strings.emplace( player_to_screen( point( temp_x, temp_y ) ) + point( tile_width / 2, 0 ),
                                          formatted_text( std::to_string( temp_value ), color,
                                                  direction::NORTH ) );
@@ -1843,6 +1843,8 @@ cata_tiles::find_tile_looks_like( const std::string &id, TILE_CATEGORY category,
             return find_tile_looks_like_by_string_id<furn_t>( id, category, looks_like_jumps_limit );
         case C_TERRAIN:
             return find_tile_looks_like_by_string_id<ter_t>( id, category, looks_like_jumps_limit );
+        case C_TRAP:
+            return find_tile_looks_like_by_string_id<trap>( id, category, looks_like_jumps_limit );
         case C_FIELD:
             return find_tile_looks_like_by_string_id<field_type>( id, category, looks_like_jumps_limit );
         case C_MONSTER:
@@ -3037,7 +3039,7 @@ bool cata_tiles::draw_critter_at( const tripoint &p, lit_level ll, int &height_3
     bool result;
     bool is_player;
     bool sees_player;
-    Creature::Attitude attitude;
+    Attitude attitude;
     const auto override = monster_override.find( p );
     if( override != monster_override.end() ) {
         const mtype_id id = std::get<0>( override->second );
@@ -3069,7 +3071,7 @@ bool cata_tiles::draw_critter_at( const tripoint &p, lit_level ll, int &height_3
         result = false;
         sees_player = false;
         is_player = false;
-        attitude = Creature::A_ANY;
+        attitude = Attitude::A_ANY;
         const monster *m = dynamic_cast<const monster *>( &critter );
         if( m != nullptr ) {
             const auto ent_category = C_MONSTER;
@@ -3179,9 +3181,11 @@ bool cata_tiles::draw_zombie_revival_indicators( const tripoint &pos, const lit_
     if( tileset_ptr->find_tile_type( ZOMBIE_REVIVAL_INDICATOR ) && !invisible[0] &&
         item_override.find( pos ) == item_override.end() && here.could_see_items( pos, g->u ) ) {
         for( auto &i : here.i_at( pos ) ) {
-            if( i->can_revive() ) {
-                return draw_from_id_string( ZOMBIE_REVIVAL_INDICATOR, C_NONE, empty_string, pos, 0, 0,
-                                            lit_level::LIT, false, z_drop );
+            if( i->is_corpse() ) {
+                if( i->can_revive() || ( i->get_mtype()->zombify_into && !i->has_flag( flag_PULPED ) ) ) {
+                    return draw_from_id_string( ZOMBIE_REVIVAL_INDICATOR, C_NONE, empty_string, pos, 0, 0,
+                                                lit_level::LIT, false, z_drop );
+                }
             }
         }
     }
@@ -3360,7 +3364,7 @@ void cata_tiles::init_draw_below_override( const tripoint &p, const bool draw )
     draw_below_override.emplace( p, draw );
 }
 void cata_tiles::init_draw_monster_override( const tripoint &p, const mtype_id &id, const int count,
-        const bool more, const Creature::Attitude att )
+        const bool more, const Attitude att )
 {
     monster_override.emplace( p, std::make_tuple( id, count, more, att ) );
 }

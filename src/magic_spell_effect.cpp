@@ -664,9 +664,9 @@ static void spell_move( const spell &sp, const Creature &caster,
 
     if( can_target_creature ) {
         if( Creature *victim = g->critter_at<Creature>( from ) ) {
-            Creature::Attitude cr_att = victim->attitude_to( get_avatar() );
-            bool valid = cr_att != Creature::A_FRIENDLY && sp.is_valid_effect_target( target_hostile );
-            valid |= cr_att == Creature::A_FRIENDLY && sp.is_valid_effect_target( target_ally );
+            Attitude cr_att = victim->attitude_to( get_avatar() );
+            bool valid = cr_att != Attitude::A_FRIENDLY && sp.is_valid_effect_target( target_hostile );
+            valid |= cr_att == Attitude::A_FRIENDLY && sp.is_valid_effect_target( target_ally );
             valid |= victim == &caster && sp.is_valid_effect_target( target_self );
             if( valid ) {
                 victim->knock_back_to( to );
@@ -1069,7 +1069,7 @@ void spell_effect::mutate( const spell &sp, Creature &caster, const tripoint &ta
             if( sp.has_flag( spell_flag::MUTATE_TRAIT ) ) {
                 guy->mutate_towards( trait_id( sp.effect_data() ) );
             } else {
-                guy->mutate_category( sp.effect_data() );
+                guy->mutate_category( mutation_category_id( sp.effect_data() ) );
             }
         }
         sp.make_sound( potential_target );

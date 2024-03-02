@@ -5,8 +5,10 @@
 #include <set>
 #include <string>
 
+#include "catalua_type_operators.h"
 #include "translations.h"
 #include "type_id.h"
+
 class JsonObject;
 
 extern const flag_id flag_NULL;
@@ -119,6 +121,7 @@ extern const flag_id flag_FIREWOOD;
 extern const flag_id flag_FIRE_100;
 extern const flag_id flag_FIRE_20;
 extern const flag_id flag_FIRE_50;
+extern const flag_id flag_HEAVY_WEAPON_SUPPORT;
 extern const flag_id flag_FIRE_TWOHAND;
 extern const flag_id flag_FISH_GOOD;
 extern const flag_id flag_FISH_POOR;
@@ -269,6 +272,7 @@ extern const flag_id flag_REDUCED_WEIGHT;
 extern const flag_id flag_RELOAD_AND_SHOOT;
 extern const flag_id flag_RELOAD_EJECT;
 extern const flag_id flag_RELOAD_ONE;
+extern const flag_id flag_resized_large;
 extern const flag_id flag_REQUIRES_BALANCE;
 extern const flag_id flag_REQUIRES_TINDER;
 extern const flag_id flag_RESTRICT_HANDS;
@@ -410,6 +414,8 @@ class json_flag
         static bool is_ready();
 
         static const std::vector<json_flag> &get_all();
+
+        LUA_TYPE_OPS( json_flag, id );
 
     private:
         translation info_;

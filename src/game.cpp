@@ -481,11 +481,7 @@ void game::setup()
 
     init::load_world_modfiles( ui, get_world_base_save_path() + "/" + SAVE_ARTIFACTS );
 
-    if( get_option<bool>( "ELEVATED_BRIDGES" ) && !get_option<bool>( "ZLEVELS" ) ) {
-        debugmsg( "\"Elevated bridges\" mod requires z-levels to be ENABLED to work properly!" );
-    }
-
-    m = map( get_option<bool>( "ZLEVELS" ) );
+    m = map();
 
     next_npc_id = character_id( 1 );
     next_mission_id = 1;
@@ -2219,6 +2215,7 @@ input_context get_default_mode_input_context()
     ctxt.register_action( "debug" );
     ctxt.register_action( "lua_console" );
     ctxt.register_action( "lua_reload" );
+    ctxt.register_action( "open_wiki" );
     ctxt.register_action( "debug_scent" );
     ctxt.register_action( "debug_scent_type" );
     ctxt.register_action( "debug_temp" );
@@ -3612,7 +3609,7 @@ Creature *game::is_hostile_very_close()
 Creature *game::is_hostile_within( int distance )
 {
     for( auto &critter : u.get_visible_creatures( distance ) ) {
-        if( u.attitude_to( *critter ) == Creature::A_HOSTILE ) {
+        if( u.attitude_to( *critter ) == Attitude::A_HOSTILE ) {
             return critter;
         }
     }
@@ -3939,6 +3936,9 @@ void game::mon_info_update( )
                 case direction::BELOWSOUTHEAST:
                     index = 3;
                     break;
+                case direction::last:
+                    debugmsg( "invalid direction" );
+                    abort();
             }
         }
 
@@ -5528,7 +5528,7 @@ void game::examine( const tripoint &examp )
                 if( monexamine::pay_bot( *mon ) ) {
                     return;
                 }
-            } else if( mon->attitude_to( u ) == Creature::A_FRIENDLY && !u.is_mounted() ) {
+            } else if( mon->attitude_to( u ) == Attitude::A_FRIENDLY && !u.is_mounted() ) {
                 if( monexamine::mfriend_menu( *mon ) ) {
                     return;
                 }
@@ -5680,10 +5680,10 @@ void game::peek()
         vertical_move( p->z, false, true );
 
         if( old_pos != u.pos() ) {
-            look_around();
             vertical_move( p->z * -1, false, true );
+        } else {
+            return;
         }
-        return;
     }
 
     if( m.impassable( u.pos() + *p ) || m.obstructed_by_vehicle_rotation( u.pos(), u.pos() + *p ) ) {
@@ -5863,7 +5863,7 @@ void game::print_visibility_info( const catacurses::window &w_look, int column, 
             break;
     }
 
-    mvwprintw( w_look, point( line, column ), visibility_message );
+    mvwprintw( w_look, point( column, line ), visibility_message );
     line += 2;
 }
 
@@ -5872,7 +5872,6 @@ void game::print_terrain_info( const tripoint &lp, const catacurses::window &w_l
                                int &line )
 {
     const int max_width = getmaxx( w_look ) - column - 1;
-    int lines;
 
     const auto fmt_tile_info = []( const tripoint & lp ) {
         map &here = get_map();
@@ -5897,23 +5896,23 @@ void game::print_terrain_info( const tripoint &lp, const catacurses::window &w_l
     std::string tile = string_format( "(%s) %s", area_name, fmt_tile_info( lp ) );
 
     if( m.impassable( lp ) ) {
-        lines = fold_and_print( w_look, point( column, line ), max_width, c_light_gray,
+        line += fold_and_print( w_look, point( column, line ), max_width, c_light_gray,
                                 _( "%s; Impassable" ),
                                 tile );
     } else {
-        lines = fold_and_print( w_look, point( column, line ), max_width, c_light_gray,
+        line += fold_and_print( w_look, point( column, line ), max_width, c_light_gray,
                                 _( "%s; Movement cost %d" ),
                                 tile, m.move_cost( lp ) * 50 );
 
         const auto ll = get_light_level( std::max( 1.0,
                                          LIGHT_AMBIENT_LIT - m.ambient_light_at( lp ) + 1.0 ) );
-        mvwprintw( w_look, point( column, ++lines ), _( "Lighting: " ) );
+        mvwprintw( w_look, point( column, line++ ), _( "Lighting: " ) );
         wprintz( w_look, ll.second, ll.first );
     }
 
     std::string signage = m.get_signage( lp );
     if( !signage.empty() ) {
-        trim_and_print( w_look, point( column, ++lines ), max_width, c_dark_gray,
+        trim_and_print( w_look, point( column, line++ ), max_width, c_dark_gray,
                         // NOLINTNEXTLINE(cata-text-style): the question mark does not end a sentence
                         u.has_trait( trait_ILLITERATE ) ? _( "Sign: ???" ) : _( "Sign: %s" ), signage );
     }
@@ -5924,23 +5923,21 @@ void game::print_terrain_info( const tripoint &lp, const catacurses::window &w_l
         std::string tile_below = fmt_tile_info( below );
 
         if( !m.has_floor_or_support( lp ) ) {
-            fold_and_print( w_look, point( column, ++lines ), max_width, c_dark_gray,
-                            _( "Below: %s; No support" ),
-                            tile_below );
+            line += fold_and_print( w_look, point( column, line ), max_width, c_dark_gray,
+                                    _( "Below: %s; No support" ),
+                                    tile_below );
         } else {
-            fold_and_print( w_look, point( column, ++lines ), max_width, c_dark_gray,
-                            _( "Below: %s; Walkable" ),
-                            tile_below );
+            line += fold_and_print( w_look, point( column, line ), max_width, c_dark_gray,
+                                    _( "Below: %s; Walkable" ),
+                                    tile_below );
         }
     }
 
-    int map_features = fold_and_print( w_look, point( column, ++lines ), max_width, c_dark_gray,
-                                       m.features( lp ) );
-    fold_and_print( w_look, point( column, ++lines ), max_width, c_light_gray, _( "Coverage: %d%%" ),
-                    m.coverage( lp ) );
-    if( line < lines ) {
-        line = lines + map_features - 1;
-    }
+    line += fold_and_print( w_look, point( column, line ), max_width, c_dark_gray,
+                            m.features( lp ) );
+    line += fold_and_print( w_look, point( column, line ), max_width, c_light_gray,
+                            _( "Coverage: %d%%" ),
+                            m.coverage( lp ) );
 }
 
 void game::print_fields_info( const tripoint &lp, const catacurses::window &w_look, int column,
@@ -6008,7 +6005,8 @@ void game::print_items_info( const tripoint &lp, const catacurses::window &w_loo
         return;
     } else if( m.has_flag( "CONTAINER", lp ) && !m.could_see_items( lp, u ) ) {
         mvwprintw( w_look, point( column, ++line ), _( "You cannot see what is inside of it." ) );
-    } else if( u.has_effect( effect_blind ) || u.worn_with_flag( flag_BLIND ) ) {
+    } else if( ( u.has_effect( effect_blind ) || u.worn_with_flag( flag_BLIND ) ) &&
+               u.clairvoyance() < 1 ) {
         mvwprintz( w_look, point( column, ++line ), c_yellow,
                    _( "There's something there, but you can't see what it is." ) );
         return;
@@ -6747,7 +6745,10 @@ look_around_result game::look_around( bool show_window, tripoint &center,
                          pixel_minimap_text );
 #endif // TILES
 
-            int first_line = 1;
+            // print current position
+            center_print( w_info, 1, c_white, string_format( _( "Cursor At: (%d,%d,%d)" ), lx, ly, lz ) );
+
+            int first_line = 2;
             const int last_line = getmaxy( w_info ) - 3;
             pre_print_all_tile_info( lp, w_info, first_line, last_line, cache );
 
@@ -7821,7 +7822,7 @@ game::vmenu_ret game::list_monsters( const std::vector<Creature *> &monster_list
     ctxt.register_action( "HELP_KEYBINDINGS" );
 
     // first integer is the row the attitude category string is printed in the menu
-    std::map<int, Creature::Attitude> mSortCategory;
+    std::map<int, Attitude> mSortCategory;
 
     for( int i = 0, last_attitude = -1; i < static_cast<int>( monster_list.size() ); i++ ) {
         const auto attitude = monster_list[i]->attitude_to( u );
@@ -7916,7 +7917,7 @@ game::vmenu_ret game::list_monsters( const std::vector<Creature *> &monster_list
                         const std::string monName = is_npc ? get_safemode().npc_type_name() : m->name();
 
                         std::string sSafemode;
-                        if( get_safemode().has_rule( monName, Creature::A_ANY ) ) {
+                        if( get_safemode().has_rule( monName, Attitude::A_ANY ) ) {
                             sSafemode = _( "<R>emove from safemode Blacklist" );
                         } else {
                             sSafemode = _( "<A>dd to safemode Blacklist" );
@@ -8024,15 +8025,15 @@ game::vmenu_ret game::list_monsters( const std::vector<Creature *> &monster_list
             const auto m = dynamic_cast<monster *>( cCurMon );
             const std::string monName = ( m != nullptr ) ? m->name() : "human";
 
-            if( get_safemode().has_rule( monName, Creature::A_ANY ) ) {
-                get_safemode().remove_rule( monName, Creature::A_ANY );
+            if( get_safemode().has_rule( monName, Attitude::A_ANY ) ) {
+                get_safemode().remove_rule( monName, Attitude::A_ANY );
             }
         } else if( action == "SAFEMODE_BLACKLIST_ADD" ) {
             if( !get_safemode().empty() ) {
                 const auto m = dynamic_cast<monster *>( cCurMon );
                 const std::string monName = ( m != nullptr ) ? m->name() : "human";
 
-                get_safemode().add_rule( monName, Creature::A_ANY, get_option<int>( "SAFEMODEPROXIMITY" ),
+                get_safemode().add_rule( monName, Attitude::A_ANY, get_option<int>( "SAFEMODEPROXIMITY" ),
                                          RULE_BLACKLISTED );
             }
         } else if( action == "look" ) {
@@ -8143,7 +8144,10 @@ static void add_corpses( uilist &menu, const std::vector<item *> &its,
     int hotkey = get_initial_hotkey( menu_index );
 
     for( const item * const &it : its ) {
-        menu.addentry( menu_index++, true, hotkey, it->get_mtype()->nname() );
+        const std::string msg_name = it->has_flag( flag_CBM_SCANNED )
+                                     ? string_format( _( "%s (bionic detected)" ), it->get_mtype()->nname() )
+                                     :  _( it->get_mtype()->nname() );
+        menu.addentry( menu_index++, true, hotkey, msg_name );
         hotkey = -1;
     }
 }
@@ -8231,9 +8235,19 @@ static void butcher_submenu( const std::vector<item *> &corpses, int corpse = -1
     bool has_skin = false;
     bool has_organs = false;
 
-    if( corpse != -1 ) {
-        const mtype *dead_mon = corpses[corpse]->get_mtype();
-        if( dead_mon ) {
+    // check if either the specific corpse has skin/organs or if any
+    // of the corpses do in case of a batch job
+    int i = 0;
+    for( const item * const &it : corpses ) {
+        // only interested in a specific corpse, skip the rest
+        if( corpse != -1 && corpse != i ) {
+            ++i;
+            continue;
+        }
+        ++i;
+
+        const mtype *dead_mon = it->get_mtype();
+        if( dead_mon != nullptr ) {
             for( const harvest_entry &entry : dead_mon->harvest.obj() ) {
                 if( entry.type == "skin" ) {
                     has_skin = true;
@@ -9366,7 +9380,7 @@ point game::place_player( const tripoint &dest_loc )
     if( !m.has_flag( "SEALED", u.pos() ) ) {
         if( get_option<bool>( "NO_AUTO_PICKUP_ZONES_LIST_ITEMS" ) ||
             !check_zone( zone_type_id( "NO_AUTO_PICKUP" ), u.pos() ) ) {
-            if( u.is_blind() && !m.i_at( u.pos() ).empty() ) {
+            if( u.is_blind() && !m.i_at( u.pos() ).empty() && u.clairvoyance() < 1 ) {
                 add_msg( _( "There's something here, but you can't see what it is." ) );
             } else if( m.has_items( u.pos() ) ) {
                 std::vector<std::string> names;
@@ -10032,38 +10046,12 @@ void game::vertical_move( int movez, bool force, bool peeking )
         }
     }
 
-    // > and < are used for diving underwater.
-    if( m.has_flag( "SWIMMABLE", u.pos() ) && m.has_flag( TFLAG_DEEP_WATER, u.pos() ) ) {
-        if( movez == -1 ) {
-            if( u.is_underwater() ) {
-                add_msg( m_info, _( "You are already underwater!" ) );
-                return;
-            }
-            if( u.worn_with_flag( flag_FLOTATION ) ) {
-                add_msg( m_info, _( "You can't dive while wearing a flotation device." ) );
-                return;
-            }
-            u.set_underwater( true );
-            ///\EFFECT_STR increases breath-holding capacity while diving
-            u.oxygen = 30 + 2 * u.str_cur;
-            add_msg( _( "You dive underwater!" ) );
-        } else {
-            if( u.swim_speed() < 500 || u.shoe_type_count( itype_swim_fins ) ) {
-                u.set_underwater( false );
-                add_msg( _( "You surface." ) );
-            } else {
-                add_msg( m_info, _( "You try to surface but can't!" ) );
-            }
-        }
-        u.moves -= 100;
-        return;
-    }
-
     // Force means we're going down, even if there's no staircase, etc.
     bool climbing = false;
     int move_cost = 100;
     tripoint stairs( u.posx(), u.posy(), u.posz() + movez );
-    if( m.has_zlevels() && !force && movez == 1 && !m.has_flag( "GOES_UP", u.pos() ) ) {
+    if( m.has_zlevels() && !force && movez == 1 && !m.has_flag( "GOES_UP", u.pos() ) &&
+        !u.is_underwater() ) {
         // Climbing
         if( m.has_floor_or_support( stairs ) ) {
             add_msg( m_info, _( "You can't climb here - there's a ceiling above your head." ) );
@@ -10126,10 +10114,12 @@ void game::vertical_move( int movez, bool force, bool peeking )
         }
     }
 
-    if( !force && movez == -1 && !m.has_flag( "GOES_DOWN", u.pos() ) ) {
+    if( !force && movez == -1 && !m.has_flag( "GOES_DOWN", u.pos() ) &&
+        !u.is_underwater() ) {
         add_msg( m_info, _( "You can't go down here!" ) );
         return;
-    } else if( !climbing && !force && movez == 1 && !m.has_flag( "GOES_UP", u.pos() ) ) {
+    } else if( !climbing && !force && movez == 1 && !m.has_flag( "GOES_UP", u.pos() ) &&
+               !u.is_underwater() ) {
         add_msg( m_info, _( "You can't go up here!" ) );
         return;
     }
@@ -10205,10 +10195,101 @@ void game::vertical_move( int movez, bool force, bool peeking )
         maybetmp.load( tripoint( get_levx(), get_levy(), z_after ), false );
     }
 
+    bool swimming = false;
+    bool surfacing = false;
+    bool submerging = false;
+    // > and < are used for diving underwater.
+    if( m.has_flag( TFLAG_SWIMMABLE, u.pos() ) ) {
+        swimming = true;
+        const ter_id &target_ter = m.ter( u.pos() + tripoint( 0, 0, movez ) );
+
+        // If we're in a water tile that has both air above and deep enough water to submerge in...
+        if( m.has_flag( TFLAG_DEEP_WATER, u.pos() ) &&
+            !m.has_flag( TFLAG_WATER_CUBE, u.pos() ) ) {
+            // ...and we're trying to swim down
+            if( movez == -1 ) {
+                // ...and we're already submerged
+                if( u.is_underwater() ) {
+                    // ...and there's more water beneath us.
+                    if( target_ter->has_flag( TFLAG_WATER_CUBE ) ) {
+                        // Then go ahead and move down.
+                        add_msg( _( "You swim down." ) );
+                    } else {
+                        // There's no more water beneath us.
+                        add_msg( m_info,
+                                 _( "You are already underwater and there is no more water beneath you to swim down!" ) );
+                        return;
+                    }
+                }
+                // ...and we're not already submerged.
+                else {
+                    // Check for a flotation device first before allowing us to submerge.
+                    if( u.worn_with_flag( flag_FLOTATION ) ) {
+                        add_msg( m_info, _( "You can't dive while wearing a flotation device." ) );
+                        return;
+                    }
+
+                    // Then dive under the surface.
+                    u.oxygen = 30 + 2 * u.str_cur;
+                    u.set_underwater( true );
+                    add_msg( _( "You dive underwater!" ) );
+                    submerging = true;
+                }
+            }
+            // ...and we're trying to surface
+            else if( movez == 1 ) {
+                // ... and we're already submerged
+                if( u.is_underwater() ) {
+                    if( u.swim_speed() < 500 || u.shoe_type_count( itype_swim_fins ) ) {
+                        u.set_underwater( false );
+                        add_msg( _( "You surface." ) );
+                        surfacing = true;
+                    } else {
+                        add_msg( m_info, _( "You try to surface but can't!" ) );
+                        return;
+                    }
+                }
+            }
+        }
+        // If we're in a water tile that is entirely water
+        else if( m.has_flag( TFLAG_WATER_CUBE, u.pos() ) ) {
+            // If you're at this point, you should already be underwater, but force that to be the case.
+            if( !u.is_underwater() ) {
+                u.oxygen = 30 + 2 * u.str_cur;
+                u.set_underwater( true );
+            }
+
+            // ...and we're trying to swim down
+            if( movez == -1 ) {
+                // ...and there's more water beneath us.
+                if( target_ter->has_flag( TFLAG_WATER_CUBE ) ) {
+                    // Then go ahead and move down.
+                    add_msg( _( "You swim down." ) );
+                } else {
+                    add_msg( m_info,
+                             _( "You are already underwater and there is no more water beneath you to swim down!" ) );
+                    return;
+                }
+            }
+            // ...and we're trying to move up
+            else if( movez == 1 ) {
+                // ...and there's more water above us us.
+                if( target_ter->has_flag( TFLAG_WATER_CUBE ) ||
+                    target_ter->has_flag( TFLAG_DEEP_WATER ) ) {
+                    // Then go ahead and move up.
+                    add_msg( _( "You swim up." ) );
+                } else {
+                    add_msg( m_info, _( "You are already underwater and there is no water above you to swim up!" ) );
+                    return;
+                }
+            }
+        }
+    }
+
     // Find the corresponding staircase
     bool rope_ladder = false;
     // TODO: Remove the stairfinding, make the mapgen gen aligned maps
-    if( !force && !climbing ) {
+    if( !force && !climbing && !swimming ) {
         const std::optional<tripoint> pnt = find_or_make_stairs( maybetmp, z_after, rope_ladder, peeking );
         if( !pnt ) {
             return;
@@ -10300,6 +10381,13 @@ void game::vertical_move( int movez, bool force, bool peeking )
             m.unboard_vehicle( np->pos() );
         }
     }
+
+    if( surfacing || submerging ) {
+        // Surfacing and submerging don't actually move us anywhere, and just
+        // toggle our underwater state in the same location.
+        return;
+    }
+
     const tripoint old_pos = g->u.pos();
     point submap_shift;
     vertical_shift( z_after );

@@ -23,6 +23,7 @@
 #include "enums.h"
 #include "enum_conversions.h"
 #include "game_constants.h"
+#include "mapgendata.h"
 #include "memory_fast.h"
 #include "mongroup.h"
 #include "omdata.h"
@@ -231,6 +232,7 @@ class overmap
         void ter_set( const tripoint_om_omt &p, const oter_id &id );
         const oter_id &ter( const tripoint_om_omt &p ) const;
         std::string *join_used_at( const om_pos_dir & );
+        std::optional<mapgen_arguments> *mapgen_args( const tripoint_om_omt & );
         bool &seen( const tripoint_om_omt &p );
         bool seen( const tripoint_om_omt &p ) const;
         bool &explored( const tripoint_om_omt &p );
@@ -370,6 +372,11 @@ class overmap
         // Records the joins that were chosen during placement of a mutable
         // special, so that it can be queried later by mapgen
         std::unordered_map<om_pos_dir, std::string> joins_used;
+        // Records mapgen parameters required at the overmap special level
+        // These are lazily evaluated; empty optional means that they have yet
+        // to be evaluated.
+        std::vector<std::optional<mapgen_arguments>> mapgen_arg_storage;
+        std::unordered_map<tripoint_om_omt, int> mapgen_args_index;
 
         oter_id get_default_terrain( int z ) const;
 
@@ -408,9 +415,6 @@ class overmap
         void process_mongroups();
         void move_hordes();
 
-        static bool is_obsolete_terrain( const std::string &ter );
-        void convert_terrain( const std::unordered_map<tripoint_om_omt, std::string> &needs_conversion );
-
         // Overall terrain
         void place_river( point_om_omt pa, point_om_omt pb );
         void place_forests();
@@ -436,7 +440,6 @@ class overmap
         void build_city_street( const overmap_connection &connection, const point_om_omt &p, int cs,
                                 om_direction::type dir, const city &town, std::vector<tripoint_om_omt> &sewers,
                                 int block_width = 2 );
-        void build_mine( const tripoint_om_omt &origin, int s );
 
         // Connection laying
         pf::directed_path<point_om_omt> lay_out_connection(
@@ -448,10 +451,10 @@ class overmap
     public:
         bool build_connection(
             const overmap_connection &connection, const pf::directed_path<point_om_omt> &path, int z,
-            const om_direction::type &initial_dir = om_direction::type::invalid );
+            cube_direction initial_dir = cube_direction::last );
         bool build_connection( const point_om_omt &source, const point_om_omt &dest, int z,
                                const overmap_connection &connection, bool must_be_unexplored,
-                               const om_direction::type &initial_dir = om_direction::type::invalid );
+                               cube_direction initial_dir = cube_direction::last );
         void connect_closest_points( const std::vector<point_om_omt> &points, int z,
                                      const overmap_connection &connection );
         // Polishing
@@ -459,6 +462,7 @@ class overmap
                        const tripoint_om_omt &p ) const;
         bool check_overmap_special_type( const overmap_special_id &id,
                                          const tripoint_om_omt &location ) const;
+        std::optional<overmap_special_id> overmap_special_at( const tripoint_om_omt &p ) const;
 
         void polish_rivers( const overmap *north, const overmap *east, const overmap *south,
                             const overmap *west );
@@ -504,8 +508,10 @@ class overmap
         void load_legacy_monstergroups( JsonIn &jsin );
         void save_monster_groups( JsonOut &jo ) const;
     public:
-        static void load_obsolete_terrains( const JsonObject &jo );
-        static void reset_obsolete_terrains();
+        static void load_oter_id_migration( const JsonObject &jo );
+        static void reset_oter_id_migrations();
+        static bool is_oter_id_obsolete( const std::string &oterid );
+        void migrate_oter_ids( const std::unordered_map<tripoint_om_omt, std::string> &points );
 };
 
 bool is_river( const oter_id &ter );

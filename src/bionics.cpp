@@ -68,6 +68,7 @@
 #include "point.h"
 #include "projectile.h"
 #include "requirements.h"
+#include "regen.h"
 #include "rng.h"
 #include "sounds.h"
 #include "string_formatter.h"
@@ -152,6 +153,8 @@ static const bionic_id bio_blood_filter( "bio_blood_filter" );
 static const bionic_id bio_cqb( "bio_cqb" );
 static const bionic_id bio_earplugs( "bio_earplugs" );
 static const bionic_id bio_ears( "bio_ears" );
+static const bionic_id bio_electrosense( "bio_electrosense" );
+static const bionic_id bio_electrosense_voltmeter( "bio_electrosense_voltmeter" );
 static const bionic_id bio_emp( "bio_emp" );
 static const bionic_id bio_evap( "bio_evap" );
 static const bionic_id bio_eye_optic( "bio_eye_optic" );
@@ -159,11 +162,11 @@ static const bionic_id bio_flashbang( "bio_flashbang" );
 static const bionic_id bio_geiger( "bio_geiger" );
 static const bionic_id bio_gills( "bio_gills" );
 static const bionic_id bio_hydraulics( "bio_hydraulics" );
+static const bionic_id bio_infolink( "bio_infolink" );
 static const bionic_id bio_jointservo( "bio_jointservo" );
 static const bionic_id bio_lighter( "bio_lighter" );
 static const bionic_id bio_lockpick( "bio_lockpick" );
 static const bionic_id bio_magnet( "bio_magnet" );
-static const bionic_id bio_meteorologist( "bio_meteorologist" );
 static const bionic_id bio_nanobots( "bio_nanobots" );
 static const bionic_id bio_painkiller( "bio_painkiller" );
 static const bionic_id bio_power_storage( "bio_power_storage" );
@@ -626,8 +629,8 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
         if( !eff_only && !bio.is_auto_start_keep_full() ) {
             add_msg_if_player( m_info, _( "You activate your %s." ), bio.info().name );
         } else if( get_player_character().sees( pos() ) ) {
-            add_msg( m_info, _( "%s activates their %s." ), disp_name(),
-                     bio.info().name );
+            add_msg_if_npc( m_info, _( "%s activates their %s." ), disp_name(),
+                            bio.info().name );
         }
     };
     auto refund_power = [&]() {
@@ -773,6 +776,7 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
     } else if( bio.id == bio_blood_filter ) {
         add_msg_activate();
         static const std::vector<efftype_id> removable = {{
+                effect_adrenaline,
                 effect_fungus, effect_dermatik, effect_bloodworms,
                 effect_poison, effect_stung, effect_badpoison,
                 effect_pkill1, effect_pkill2, effect_pkill3, effect_pkill_l,
@@ -787,7 +791,6 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
             remove_effect( eff );
         }
         // Purging the substance won't remove the fatigue it caused
-        force_comedown( get_effect( effect_adrenaline ) );
         force_comedown( get_effect( effect_meth ) );
         set_painkiller( 0 );
         set_stim( 0 );
@@ -825,7 +828,7 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
             return false;
         } else {
             add_msg_activate();
-            add_effect( effect_adrenaline, 20_minutes );
+            add_effect( effect_adrenaline, 3_minutes );
         }
     } else if( bio.id == bio_emp ) {
         if( const std::optional<tripoint> pnt = choose_adjacent( _( "Create an EMP where?" ) ) ) {
@@ -955,7 +958,7 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
         explosion_handler::shockwave( pos(), sw, "explosion", &get_player_character() );
         add_msg_if_player( m_neutral, _( "You unleash a powerful shockwave!" ) );
         mod_moves( -100 );
-    } else if( bio.id == bio_meteorologist ) {
+    } else if( bio.id == bio_infolink ) {
         const weather_manager &weather = get_weather();
         add_msg_activate();
         // Calculate local wind power
@@ -984,7 +987,7 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
                            print_temperature(
                                get_local_windchill( units::to_fahrenheit( weatherPoint.temperature ),
                                        weatherPoint.humidity,
-                                       windpower / 100 ) + player_local_temp ) );
+                                       windpower / 100 ) + units::to_fahrenheit( player_local_temp ) ) );
         std::string dirstring = get_dirstring( weather.winddirection );
         add_msg_if_player( m_info, _( "Wind Direction: From the %s." ), dirstring );
     } else if( bio.id == bio_remote ) {
@@ -1079,6 +1082,11 @@ bool Character::activate_bionic( bionic &bio, bool eff_only, bool *close_bionics
             refund_power();
             return false;
         }
+    } else if( bio.id == bio_electrosense_voltmeter ) {
+        add_msg_activate();
+        item *vtm;
+        vtm = item::spawn_temporary( "voltmeter", calendar::start_of_cataclysm );
+        invoke_item( vtm );
     } else {
         add_msg_activate();
     }
@@ -1662,28 +1670,32 @@ void Character::process_bionic( bionic &bio )
                 }
             }
             if( calendar::once_every( 2_minutes ) ) {
-                std::vector<bodypart_id> damaged_hp_parts;
-                for( const bodypart_id &bp : get_all_body_parts( true ) ) {
-                    const int hp_cur = get_part_hp_cur( bp );
-                    if( !is_limb_broken( bp ) && hp_cur < get_part_hp_max( bp ) ) {
-                        damaged_hp_parts.push_back( bp );
+                // Essential parts are considered 10 HP lower than non-essential parts for the purpose of determining priority.
+                // I'd use the essential_value, but it's tied up in the heal_actor class of iuse_actor.
+                const auto effective_hp = [this]( const bodypart_id & bp ) -> int {
+                    return get_part_hp_cur( bp ) - bp->essential * 10;
+                };
+                const auto should_heal = [this]( const bodypart_id & bp ) -> bool {
+                    return get_part_hp_cur( bp ) < get_part_hp_max( bp );
+                };
+                const auto sort_by = [effective_hp]( const bodypart_id & a, const bodypart_id & b ) -> bool {
+                    return effective_hp( a ) < effective_hp( b );
+                };
+                const auto damaged_parts = [this, should_heal, sort_by]() {
+                    const auto xs = get_all_body_parts( true );
+                    auto ys = std::vector<bodypart_id> {};
+                    std::copy_if( xs.begin(), xs.end(), std::back_inserter( ys ), should_heal );
+                    std::sort( ys.begin(), ys.end(), sort_by );
+                    return ys;
+                };
+
+                for( bodypart_id &bp : damaged_parts() ) {
+                    if( !can_use_bionic() ) {
+                        return;
                     }
-                }
-                if( !damaged_hp_parts.empty() ) {
-                    // Essential parts are considered 10 HP lower than non-essential parts for the purpose of determining priority.
-                    // I'd use the essential_value, but it's tied up in the heal_actor class of iuse_actor.
-                    std::sort( damaged_hp_parts.begin(), damaged_hp_parts.end(),
-                    [this]( const bodypart_id & a, const bodypart_id & b ) {
-                        return ( get_part_hp_cur( a ) - a->essential * 10 ) < ( get_part_hp_cur( b ) - b->essential * 10 );
-                    } );
-                    for( bodypart_id &bpid : damaged_hp_parts ) {
-                        if( !can_use_bionic() ) {
-                            return;
-                        }
-                        heal( bpid, 1 );
-                        mod_power_level( -bio.info().power_trigger );
-                        mod_stored_kcal( -bio.info().kcal_trigger );
-                    }
+                    heal_adjusted( *this, bp, 1 );
+                    mod_power_level( -bio.info().power_trigger );
+                    mod_stored_kcal( -bio.info().kcal_trigger );
                 }
             }
         }
@@ -1768,6 +1780,43 @@ void Character::process_bionic( bionic &bio )
         }
     } else if( bio.id == afs_bio_dopamine_stimulators ) {
         add_morale( MORALE_FEELING_GOOD, 20, 20, 30_minutes, 20_minutes, true );
+    } else if( bio.id == bio_electrosense ) {
+        // This is a horrible mess but can't use the active iuse behavior directly
+        map &here = get_map();
+        for( const tripoint &pt : here.points_in_radius( pos(), PICKUP_RANGE ) ) {
+            if( !here.has_items( pt ) || !sees( pt ) ) {
+                continue;
+            }
+            for( item * const &corpse : here.i_at( pt ) ) {
+                if( !corpse->is_corpse() ||
+                    corpse->get_var( "bionics_scanned_by", -1 ) == getID().get_value() ) {
+                    continue;
+                }
+
+                std::vector<const item *> cbms;
+                for( const item * const &maybe_cbm : corpse->get_components() ) {
+                    if( maybe_cbm->is_bionic() ) {
+                        cbms.push_back( maybe_cbm );
+                    }
+                }
+
+                corpse->set_var( "bionics_scanned_by", getID().get_value() );
+                if( !cbms.empty() ) {
+                    corpse->set_flag( flag_CBM_SCANNED );
+                    std::string bionics_string =
+                        enumerate_as_string( cbms.begin(), cbms.end(),
+                    []( const item * entry ) -> std::string {
+                        return entry->display_name();
+                    }, enumeration_conjunction::none );
+                    //~ %1 is corpse name, %2 is direction, %3 is bionic name
+                    add_msg_if_player( m_good, _( "A %1$s located %2$s contains %3$s." ),
+                                       corpse->display_name().c_str(),
+                                       direction_name( direction_from( pos(), pt ) ).c_str(),
+                                       bionics_string.c_str()
+                                     );
+                }
+            }
+        }
     } else if( bio.id == bio_radscrubber ) {
         if( calendar::once_every( 10_minutes ) ) {
             const units::energy trigger_cost = bio.info().power_trigger;
@@ -2915,7 +2964,7 @@ void Character::introduce_into_anesthesia( const time_duration &duration, player
                                _( "You feel excited as the Autodoc slices painlessly into you.  You enjoy the sight of scalpels slicing you apart." ) );
         } else {
             add_msg_if_player( m_mixed,
-                               _( "You stay very, very still, focusing intently on an interesting stain on the ceiling, as the Autodoc slices painlessly into you." ) );
+                               _( "You stay very, very still, intently staring off into space, as the Autodoc slices painlessly into you." ) );
         }
     }
 

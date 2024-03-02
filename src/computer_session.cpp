@@ -13,7 +13,6 @@
 #include "character_id.h"
 #include "color.h"
 #include "coordinate_conversions.h"
-#include "creature.h"
 #include "debug.h"
 #include "enums.h"
 #include "event.h"
@@ -110,7 +109,7 @@ void computer_session::use()
     print_line( _( "Logging into %s…" ), comp.name );
     if( comp.security > 0 ) {
         if( calendar::turn < comp.next_attempt ) {
-            print_error( _( "Access is temporary blocked for security purposes." ) );
+            print_error( _( "Access is temporarily blocked for security purposes." ) );
             query_any( _( "Please contact the system administrator." ) );
             reset_terminal();
             return;
@@ -244,7 +243,7 @@ static void remove_submap_turrets()
         // Check 1) same overmap coords, 2) turret, 3) hostile
         if( ms_to_omt_copy( here.getabs( critter.pos() ) ) == ms_to_omt_copy( here.getabs( g->u.pos() ) ) &&
             critter.has_flag( MF_CONSOLE_DESPAWN ) &&
-            critter.attitude_to( g->u ) == Creature::Attitude::A_HOSTILE ) {
+            critter.attitude_to( g->u ) == Attitude::A_HOSTILE ) {
             g->remove_zombie( critter );
         }
     }

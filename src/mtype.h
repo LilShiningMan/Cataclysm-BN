@@ -50,6 +50,7 @@ enum class mon_trigger : int {
     SOUND,              // Heard a sound
     PLAYER_NEAR_BABY,   // Player/npc is near a baby monster of this type
     MATING_SEASON,      // It's the monster's mating season (defined by baby_flags)
+    NETHER_ATTENTION,   // Player/npc currently has effect_attention
 
     _LAST               // This item must always remain last.
 };
@@ -298,12 +299,14 @@ struct mtype {
         int sk_dodge = 0;       /** dodge skill */
 
         /** If unset (-1) then values are calculated automatically from other properties */
-        int armor_bash = -1;    /** innate armor vs. bash */
-        int armor_cut  = -1;    /** innate armor vs. cut */
-        int armor_stab = -1;    /** innate armor vs. stabbing */
-        int armor_bullet = -1;  /** innate armor vs. bullet */
-        int armor_acid = -1;    /** innate armor vs. acid */
-        int armor_fire = -1;    /** innate armor vs. fire */
+        int armor_bash = -1;     /** innate armor vs. bash */
+        int armor_cut  = -1;     /** innate armor vs. cut */
+        int armor_stab = -1;     /** innate armor vs. stabbing */
+        int armor_bullet = -1;   /** innate armor vs. bullet */
+        int armor_acid = -1;     /** innate armor vs. acid */
+        int armor_fire = -1;     /** innate armor vs. fire */
+        int armor_cold = -1;     /** innate armor vs. cold */
+        int armor_electric = -1; /** innate armor vs. electrical */
 
         // Vision range is linearly scaled depending on lighting conditions
         int vision_day = 40;    /** vision range in bright light */

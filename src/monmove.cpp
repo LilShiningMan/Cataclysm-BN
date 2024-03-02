@@ -58,6 +58,7 @@ static const efftype_id effect_downed( "downed" );
 static const efftype_id effect_dragging( "dragging" );
 static const efftype_id effect_grabbed( "grabbed" );
 static const efftype_id effect_harnessed( "harnessed" );
+static const efftype_id effect_mon_mitosis( "mon_mitosis" );
 static const efftype_id effect_no_sight( "no_sight" );
 static const efftype_id effect_operating( "operating" );
 static const efftype_id effect_pacified( "pacified" );
@@ -701,7 +702,8 @@ void monster::move()
     //The monster can consume objects it stands on. Check if there are any.
     //If there are. Consume them.
     // TODO: Stick this in a map and dispatch to it via the action string.
-    if( action == "consume_items" ) {
+    if( action == "consume_items" && ( !has_effect( effect_mon_mitosis ) || hp < type->hp * 3 ) ) {
+        // Eat items unless we're both recently split AND binged too hard afterwards
         if( g->u.sees( *this ) ) {
             add_msg( _( "The %s flows around the objects on the floor and they are quickly dissolved!" ),
                      name() );
@@ -709,13 +711,19 @@ void monster::move()
         static const auto volume_per_hp = 250_ml;
         for( auto &elem : g->m.i_at( pos() ) ) {
             hp += elem->volume() / volume_per_hp; // Yeah this means it can get more HP than normal.
-            if( has_flag( MF_ABSORBS_SPLITS ) ) {
+            // Don't split if we're still recovering from last time
+            if( has_flag( MF_ABSORBS_SPLITS ) && !has_effect( effect_mon_mitosis ) ) {
                 while( hp / 2 > type->hp ) {
                     monster *const spawn = g->place_critter_around( type->id, pos(), 1 );
                     if( !spawn ) {
                         break;
                     }
+                    // Splitting takes a bit out of both
                     hp -= type->hp;
+                    hp *= 0.75;
+                    add_effect( effect_mon_mitosis, 1_minutes );
+                    spawn->hp *= 0.75;
+                    spawn->add_effect( effect_mon_mitosis, 1_minutes );
                     //this is a new copy of the monster. Ideally we should copy the stats/effects that affect the parent
                     spawn->make_ally( *this );
                     if( g->u.sees( *this ) ) {
@@ -993,13 +1001,13 @@ void monster::move()
 
             const Creature *target = g->critter_at( candidate, is_hallucination() );
             if( target != nullptr ) {
-                const Creature::Attitude att = attitude_to( *target );
-                if( att == A_HOSTILE ) {
+                const Attitude att = attitude_to( *target );
+                if( att == Attitude::A_HOSTILE ) {
                     // When attacking an adjacent enemy, we're direct.
                     moved = true;
                     next_step = candidate_abs;
                     break;
-                } else if( att == A_FRIENDLY && ( target->is_player() || target->is_npc() ) ) {
+                } else if( att == Attitude::A_FRIENDLY && ( target->is_player() || target->is_npc() ) ) {
                     continue; // Friendly firing the player or an NPC is illegal for gameplay reasons
                 } else if( !has_flag( MF_ATTACKMON ) && !has_flag( MF_PUSH_MON ) ) {
                     // Bail out if there's a non-hostile monster in the way and we're not pushy.
@@ -1408,7 +1416,7 @@ bool monster::bash_at( const tripoint &p )
 
     // Don't bash if a friendly monster is standing there
     monster *target = g->critter_at<monster>( p );
-    if( target != nullptr && attitude_to( *target ) == A_FRIENDLY ) {
+    if( target != nullptr && attitude_to( *target ) == Attitude::A_FRIENDLY ) {
         return false;
     }
 
@@ -1525,7 +1533,7 @@ bool monster::attack_at( const tripoint &p )
 
         auto attitude = attitude_to( mon );
         // MF_ATTACKMON == hulk behavior, whack everything in your way
-        if( attitude == A_HOSTILE || has_flag( MF_ATTACKMON ) ) {
+        if( attitude == Attitude::A_HOSTILE || has_flag( MF_ATTACKMON ) ) {
             melee_attack( mon );
             return true;
         }
